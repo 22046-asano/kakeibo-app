@@ -15,7 +15,7 @@ import { YearlyView } from '@/components/YearlyView';
 import { CreditCardManager } from '@/components/CreditCardManager';
 
 // 各トランザクションの計上日（クレジットカードは引き落とし日、その他は利用日）
-export const getEffectiveDate = (t: Transaction): string => {
+const getEffectiveDate = (t: Transaction): string => {
   if (t.type === 'expense' && t.payment_method === 'クレジットカード' && t.billing_date) {
     return t.billing_date;
   }
