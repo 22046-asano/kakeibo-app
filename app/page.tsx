@@ -13,7 +13,14 @@ import { TransactionModal } from '@/components/TransactionModal';
 import { CalendarView } from '@/components/CalendarView';
 import { YearlyView } from '@/components/YearlyView';
 import { CreditCardManager } from '@/components/CreditCardManager';
-import { CARD_TEMPLATES } from '@/lib/creditCardUtils';
+
+// 各トランザクションの計上日（クレジットカードは引き落とし日、その他は利用日）
+export const getEffectiveDate = (t: Transaction): string => {
+  if (t.type === 'expense' && t.payment_method === 'クレジットカード' && t.billing_date) {
+    return t.billing_date;
+  }
+  return t.date;
+};
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
@@ -47,7 +54,6 @@ export default function Home() {
         if (local) {
           setCards(JSON.parse(local));
         } else {
-          // 初期サンプルカード（楽天カードと三井住友）
           const initialCards: CreditCard[] = [
             {
               id: 'card-rakuten',
@@ -79,7 +85,7 @@ export default function Home() {
     }
   }, []);
 
-  // 取引データの読み込み (全期間取得してメモリ内で月別・年別を高速フィルタリング)
+  // 取引データの読み込み
   const fetchTransactions = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -105,30 +111,20 @@ export default function Home() {
     }
   }, []);
 
-  // 初期ロード
   useEffect(() => {
     fetchCards();
     fetchTransactions();
   }, [fetchCards, fetchTransactions]);
 
-  // Supabase Realtime リスナーの登録（PC・スマホ双方向の即時同期）
   useEffect(() => {
     const channel = supabase
       .channel('kakeibo-realtime-full')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'transactions' },
-        () => {
-          fetchTransactions();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'credit_cards' },
-        () => {
-          fetchCards();
-        }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => {
+        fetchTransactions();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'credit_cards' }, () => {
+        fetchCards();
+      })
       .subscribe();
 
     return () => {
@@ -136,13 +132,13 @@ export default function Home() {
     };
   }, [fetchTransactions, fetchCards]);
 
-  // 表示中の月の取引データを抽出
+  // 【新仕様】表示中の月の取引データを抽出（カード決済は引き落とし月、現金等は利用月ベース）
   const { startDate, endDate } = getMonthDateRange(currentDate);
-  const monthlyTransactions = allTransactions.filter(
-    (t) => t.date >= startDate && t.date <= endDate
-  );
+  const monthlyTransactions = allTransactions.filter((t) => {
+    const effectiveDate = getEffectiveDate(t);
+    return effectiveDate >= startDate && effectiveDate <= endDate;
+  });
 
-  // 月の切り替え
   const handleChangeMonth = (offset: number) => {
     setCurrentDate((prev) => {
       const next = new Date(prev);
@@ -155,7 +151,6 @@ export default function Home() {
     setCurrentDate(new Date());
   };
 
-  // 収支データの新規登録・更新
   const handleSubmitTransaction = async (data: TransactionInsert, id?: string) => {
     if (id) {
       const { error } = await supabase.from('transactions').update(data).eq('id', id);
@@ -181,7 +176,6 @@ export default function Home() {
     await fetchTransactions();
   };
 
-  // 収支データの削除
   const handleDeleteTransaction = async (id: string) => {
     const { error } = await supabase.from('transactions').delete().eq('id', id);
     if (error) {
@@ -195,7 +189,6 @@ export default function Home() {
     await fetchTransactions();
   };
 
-  // カードの登録
   const handleAddCard = async (newCard: Omit<CreditCard, 'id'>) => {
     const { error } = await supabase.from('credit_cards').insert([newCard]);
     if (error) {
@@ -209,7 +202,6 @@ export default function Home() {
     }
   };
 
-  // カードの削除
   const handleDeleteCard = async (id: string) => {
     const { error } = await supabase.from('credit_cards').delete().eq('id', id);
     if (error) {
@@ -257,6 +249,19 @@ export default function Home() {
               onResetToday={handleResetToday}
             />
 
+            {/* 引き落とし月基準の案内バッジ */}
+            <div className="bg-blue-50/80 border border-blue-200/80 rounded-2xl px-4 py-2.5 mb-5 flex items-center justify-between text-xs text-blue-800">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-blue-600" />
+                <span className="font-medium">
+                  支出の集計基準: <strong>カード引き落とし月基準</strong>
+                </span>
+              </div>
+              <span className="text-[11px] text-blue-600 hidden sm:inline">
+                ※カード決済分は実際の引落月、現金・電子マネー等は利用月で集計されます
+              </span>
+            </div>
+
             <SummaryCards transactions={monthlyTransactions} />
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -266,6 +271,7 @@ export default function Home() {
               <div className="lg:col-span-7 order-1 lg:order-2">
                 <TransactionList
                   transactions={monthlyTransactions}
+                  cards={cards}
                   onEdit={handleOpenEditModal}
                   onDelete={handleDeleteTransaction}
                 />
@@ -302,7 +308,6 @@ export default function Home() {
         )}
       </main>
 
-      {/* フローティング追加ボタン */}
       <div className="fixed bottom-6 right-6 z-40">
         <button
           onClick={handleOpenCreateModal}
