@@ -4,52 +4,98 @@ PCとスマートフォンの両方で利用でき、どちらから更新して
 
 ---
 
-## 🌟 今回のアップデート内容
+## 🌟 今回のアップデート・仕様変更内容
 
-1. **クレジットカード管理 & 引き落とし日自動計算**:
-   - 楽天カード、三井住友カード、JCB、エポス、PayPayカード、セゾン、ビューカード、イオンカード等の豊富なテンプレートを搭載。
-   - カードごとの締め日・支払日、および**土日祝日の場合の振替（翌営業日／前営業日）**ルールに完全対応。
-   - 決済時にカードを選ぶだけで、**引き落とし予定日（支払日）を自動算出**し、支払日ごとの口座残高管理が可能。
-2. **年間集計 & バイト代年収シミュレーター**:
-   - 毎月の「バイト代」収入を年間単位で自動集計。
-   - 大学生が気になる**「103万円の壁（所得税・扶養控除ライン）」や「130万円の壁（社会保険上の扶養ライン）」**に対する現在の進捗率と残り可能額をプログレスバーでリアルタイム表示。
-   - 1月〜12月の月別バイト代推移表を完備。
-3. **カレンダービュー**:
-   - 月間カレンダー上で日ごとの収支（支出・収入）をひと目で確認。
-   - **クレジットカードの引き落とし日（支払日）に青いカードバッジが表示**され、いつ口座からいくら引き落とされるかが直感的に把握可能。
-4. **「大学」カテゴリの追加**:
-   - 教科書・学費・研究費・サークル費・文具代などを管理できる「大学」支出カテゴリを追加。
+1. **支出・収入カテゴリの適正化**:
+   - 支出カテゴリに **「クレカ」** を追加。
+   - 「大学」「バイト代」の不要な絵文字アイコンを削除し、すっきりとしたUIに統一。
+   - 収入カテゴリから「給与」を削除（「バイト代」に一本化）。
+   - 収入の受取方法は **「銀行口座振込」** のみに固定。
+2. **バイト先の複数管理 ＆ 年間合算扶養計算**:
+   - 複数のバイト先（塾、カフェ、大学TAなど）を登録・管理（名称、時給、給料日メモ）。
+   - 収入登録時にバイト先を選択でき、年間タブでバイト先別の年間累計と合算年収を把握可能。
+3. **最新の税制改正（2025〜2026年）対応の年収シミュレーション**:
+   - 所得税の壁引き上げに対応（**178万円・160万円・150万円・130万円・103万円・カスタム**から基準ラインをワンタップ選択）。
+   - 複数バイト先の合算バイト代に対する進捗率（％）と、**「基準まであといくら稼げるか」**の残り可能額をリアルタイム表示。
+4. **振込予定 ＆ 5大立替金管理タブの新設（実際の収支とは完全独立）**:
+   - **バイト代振込予定チェック**: 給与明細と実際の銀行口座振込額が合っているかを照合。「振込を確認」ボタンで実際の家計簿収入へワンタップ自動登録も可能。
+   - **立替金管理**: **「友達」「大学」「会社」「彼女」「家族」**の5区分で立て替えたお金を管理。未回収合計額の表示と精算完了管理で請求漏れを防止。
+5. **月別収支 ＆ カレンダーの統合ダッシュボード**:
+   - タブを切り替える必要なく、1画面内で **「📋 明細リスト」と「📅 カレンダー」をワンタップでシームレスに切り替え可能**。
+   - カレンダー上には日別収支に加え、クレジットカード引き落とし予定日（支払日）が青いバッジで表示。
+6. **クレジットカードの登録後「編集（Edit）」機能**:
+   - 登録したクレジットカードを削除することなく、締め日・支払日・祝日振替ルール・カード名をいつでも自由に編集可能。
 
 ---
 
 ## 🛠 データベースの更新手順（Supabase）
 
-すでに Supabase プロジェクトを作成済みの場合、以下の手順で新しいテーブル・カラムを追加してください：
+新機能（バイト先テーブル、振込予定テーブル、立替金テーブルなど）を有効化するため、以下のSQLを Supabase の **SQL Editor** で貼り付けて実行（Run）してください：
 
-1. [Supabase](https://supabase.com/) のダッシュボードを開きます。
-2. 左メニューの **「SQL Editor」** を開きます。
-3. `supabase/schema.sql` の内容を貼り付けて **「Run」** をクリックします。
-   - `credit_cards` テーブルが作成されます。
-   - 既存の `transactions` テーブルに `credit_card_id` と `billing_date` カラムが追加されます。
-   - リアルタイム同期が有効化されます。
+```sql
+-- 1. バイト先管理テーブル
+create table if not exists public.employers (
+    id uuid primary key default gen_random_uuid(),
+    name text not null,
+    hourly_wage integer,
+    payday_memo text default '',
+    color text default '#2563eb',
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 2. トランザクションテーブルへのカラム追加
+alter table public.transactions add column if not exists employer_id uuid references public.employers(id) on delete set null;
+alter table public.transactions add column if not exists employer_name text;
+
+-- 3. 振込予定管理テーブル (実際の家計簿収支とは独立)
+create table if not exists public.expected_incomes (
+    id uuid primary key default gen_random_uuid(),
+    employer_id uuid references public.employers(id) on delete set null,
+    employer_name text not null,
+    expected_amount integer not null check (expected_amount > 0),
+    expected_pay_date date not null,
+    work_period text default '',
+    memo text default '',
+    is_confirmed boolean not null default false,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 4. 立替金管理テーブル (友達・大学・会社・彼女・家族)
+create table if not exists public.reimbursements (
+    id uuid primary key default gen_random_uuid(),
+    target text not null check (target in ('友達', '大学', '会社', '彼女', '家族')),
+    person_or_purpose text not null,
+    amount integer not null check (amount > 0),
+    date date not null default current_date,
+    due_date date,
+    is_settled boolean not null default false,
+    memo text default '',
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 5. RLSとリアルタイム有効化
+alter table public.employers enable row level security;
+alter table public.expected_incomes enable row level security;
+alter table public.reimbursements enable row level security;
+
+create policy "Allow all on employers" on public.employers for all using (true) with check (true);
+create policy "Allow all on expected_incomes" on public.expected_incomes for all using (true) with check (true);
+create policy "Allow all on reimbursements" on public.reimbursements for all using (true) with check (true);
+
+alter publication supabase_realtime add table public.employers;
+alter publication supabase_realtime add table public.expected_incomes;
+alter publication supabase_realtime add table public.reimbursements;
+```
 
 ---
 
-## 🚀 ローカルでの起動
+## 🚀 反映手順（GitHub へのプッシュ）
 
-1. プロジェクトフォルダ直下に `.env.local` を配置します（SupabaseのURLとanon keyを設定）。
-2. ターミナルで実行：
-   ```bash
-   npm install
-   npm run dev
+1. 提供した Zip ファイルを展開し、既存のプロジェクトフォルダに上書きします。
+2. コマンドプロンプトで以下のコマンドを実行します：
+   ```cmd
+   git add .
+   git commit -m "Update: comprehensive feature overhaul"
+   git push
    ```
-3. ブラウザで `http://localhost:3000` を開きます。
-
----
-
-## 📱 タブ構成
-
-- **📊 月別収支**: 今月の総収入・総支出・残高、カテゴリ別支出割合（大学・食費・日用品など）、明細一覧。
-- **📅 カレンダー**: 日別の収支とクレジットカード引き落とし予定日カレンダー。
-- **💼 年間・バイト代**: バイト代累計、103万/130万円の壁メーター、月別バイト代一覧、大学関連年間支出。
-- **💳 カード管理**: 保有クレジットカードの登録（テンプレート選択）、今月・来月のカード引落予定額一覧。
+3. Vercel が自動でビルドし、約1分後に最新版が公開されます。

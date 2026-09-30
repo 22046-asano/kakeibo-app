@@ -10,6 +10,7 @@ interface CategoryBreakdownProps {
 
 const CATEGORY_COLORS: Record<string, string> = {
   '大学': 'bg-purple-600',
+  'クレカ': 'bg-blue-600',
   '食費': 'bg-amber-500',
   '日用品': 'bg-emerald-500',
   '交通費': 'bg-sky-500',
@@ -59,10 +60,7 @@ export const CategoryBreakdown: React.FC<CategoryBreakdownProps> = ({ transactio
                 <div className="flex justify-between items-center text-xs">
                   <div className="flex items-center gap-2">
                     <span className={`w-2.5 h-2.5 rounded-full ${colorClass}`} />
-                    <span className="font-medium text-slate-700">
-                      {category === '大学' && '🎓 '}
-                      {category}
-                    </span>
+                    <span className="font-medium text-slate-700">{category}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-slate-900">¥{amount.toLocaleString()}</span>

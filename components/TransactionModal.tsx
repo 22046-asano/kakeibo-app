@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, Check, CreditCard as CardIcon } from 'lucide-react';
+import { X, Check, CreditCard as CardIcon, Building2 } from 'lucide-react';
 import {
   Transaction,
   TransactionInsert,
   TransactionType,
   PaymentMethod,
   CreditCard,
+  Employer,
 } from '@/types';
 import { calculateBillingDate } from '@/lib/creditCardUtils';
 
@@ -17,10 +18,12 @@ interface TransactionModalProps {
   onSubmit: (data: TransactionInsert, id?: string) => Promise<void>;
   editingTransaction?: Transaction | null;
   cards: CreditCard[];
+  employers?: Employer[];
 }
 
 const EXPENSE_CATEGORIES = [
   '大学',
+  'クレカ',
   '食費',
   '日用品',
   '交通費',
@@ -35,14 +38,13 @@ const EXPENSE_CATEGORIES = [
 
 const INCOME_CATEGORIES = [
   'バイト代',
-  '給与',
   '臨時収入',
   'お小遣い',
   '事業所得',
   'その他',
 ];
 
-const PAYMENT_METHODS: PaymentMethod[] = [
+const EXPENSE_PAYMENT_METHODS: PaymentMethod[] = [
   'クレジットカード',
   '現金',
   '電子マネー/QR',
@@ -56,6 +58,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   onSubmit,
   editingTransaction,
   cards,
+  employers = [],
 }) => {
   const [type, setType] = useState<TransactionType>('expense');
   const [date, setDate] = useState<string>('');
@@ -63,6 +66,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [category, setCategory] = useState<string>('食費');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('クレジットカード');
   const [selectedCardId, setSelectedCardId] = useState<string>('');
+  const [selectedEmployerId, setSelectedEmployerId] = useState<string>('');
   const [memo, setMemo] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
@@ -72,8 +76,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setDate(editingTransaction.date);
       setAmount(editingTransaction.amount.toString());
       setCategory(editingTransaction.category);
-      setPaymentMethod(editingTransaction.payment_method);
+      setPaymentMethod(
+        editingTransaction.type === 'income' ? '銀行口座' : editingTransaction.payment_method
+      );
       setSelectedCardId(editingTransaction.credit_card_id || (cards[0]?.id || ''));
+      setSelectedEmployerId(editingTransaction.employer_id || (employers[0]?.id || ''));
       setMemo(editingTransaction.memo || '');
     } else {
       const today = new Date().toISOString().split('T')[0];
@@ -83,13 +90,19 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setCategory('食費');
       setPaymentMethod('クレジットカード');
       setSelectedCardId(cards[0]?.id || '');
+      setSelectedEmployerId(employers[0]?.id || '');
       setMemo('');
     }
-  }, [editingTransaction, isOpen, cards]);
+  }, [editingTransaction, isOpen, cards, employers]);
 
   const handleTypeChange = (newType: TransactionType) => {
     setType(newType);
     setCategory(newType === 'expense' ? EXPENSE_CATEGORIES[0] : INCOME_CATEGORIES[0]);
+    if (newType === 'income') {
+      setPaymentMethod('銀行口座'); // 収入は銀行口座振込のみ
+    } else {
+      setPaymentMethod('クレジットカード');
+    }
   };
 
   // クレジットカード引き落とし予定日の自動計算
@@ -107,6 +120,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       return;
     }
 
+    const selectedEmp = employers.find((emp) => emp.id === selectedEmployerId);
+
     try {
       setIsSubmitting(true);
       await onSubmit(
@@ -115,9 +130,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           type,
           category,
           amount: numAmount,
-          payment_method: paymentMethod,
-          credit_card_id: paymentMethod === 'クレジットカード' ? selectedCardId || null : null,
+          payment_method: type === 'income' ? '銀行口座' : paymentMethod,
+          credit_card_id: (type === 'expense' && paymentMethod === 'クレジットカード') ? selectedCardId || null : null,
           billing_date: calculatedBillingDate,
+          employer_id: (type === 'income' && category === 'バイト代') ? selectedEmployerId || null : null,
+          employer_name: (type === 'income' && category === 'バイト代' && selectedEmp) ? selectedEmp.name : null,
           memo,
         },
         editingTransaction?.id
@@ -196,9 +213,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
           </div>
 
-          {/* 日付 (利用日) */}
+          {/* 日付 (利用日/入金日) */}
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">利用日 / 発生日</label>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">
+              {type === 'expense' ? '利用日 / 発生日' : '入金日 / 振込日'}
+            </label>
             <input
               type="date"
               required
@@ -223,28 +242,67 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                       : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                   }`}
                 >
-                  {cat === '大学' && '🎓 '}
-                  {cat === 'バイト代' && '💼 '}
                   {cat}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* 支払方法 */}
+          {/* バイト代の場合: バイト先選択 */}
+          {type === 'income' && category === 'バイト代' && (
+            <div className="bg-indigo-50/70 border border-indigo-200 rounded-2xl p-3.5 space-y-2">
+              <label className="block text-xs font-bold text-indigo-900 flex items-center gap-1.5">
+                <Building2 className="w-3.5 h-3.5 text-indigo-600" />
+                <span>バイト先の選択</span>
+              </label>
+
+              {employers.length === 0 ? (
+                <p className="text-xs text-indigo-700">
+                  ※バイト先が登録されていません。「カード・バイト先設定」からバイト先を登録すると選択できます。
+                </p>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  {employers.map((emp) => (
+                    <button
+                      key={emp.id}
+                      type="button"
+                      onClick={() => setSelectedEmployerId(emp.id)}
+                      className={`p-2 rounded-xl text-xs font-semibold border transition-all text-left truncate ${
+                        selectedEmployerId === emp.id
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      {emp.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 支払・受取方法 */}
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">支払・受取方法</label>
-            <select
-              value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
-            >
-              {PAYMENT_METHODS.map((method) => (
-                <option key={method} value={method}>
-                  {method}
-                </option>
-              ))}
-            </select>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">
+              {type === 'expense' ? '支払方法' : '受取方法'}
+            </label>
+            {type === 'expense' ? (
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+              >
+                {EXPENSE_PAYMENT_METHODS.map((method) => (
+                  <option key={method} value={method}>
+                    {method}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="w-full px-3.5 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm font-medium text-slate-700">
+                銀行口座振込
+              </div>
+            )}
           </div>
 
           {/* クレジットカード選択 & 引き落とし日自動算出表示 */}
@@ -256,7 +314,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
               {cards.length === 0 ? (
                 <p className="text-xs text-blue-700">
-                  ※クレジットカードがまだ未登録です。「カード管理」タブからカードを登録すると、引き落とし日が自動計算されます。
+                  ※クレジットカードがまだ未登録です。「カード・設定」タブからカードを登録すると、引き落とし日が自動計算されます。
                 </p>
               ) : (
                 <>

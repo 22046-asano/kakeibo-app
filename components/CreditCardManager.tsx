@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { CreditCard as CardIcon, Plus, Trash2 } from 'lucide-react';
+import { CreditCard as CardIcon, Plus, Trash2, Edit2, Check } from 'lucide-react';
 import { CreditCard, CardTemplate, Transaction } from '@/types';
 import { CARD_TEMPLATES } from '@/lib/creditCardUtils';
 
@@ -9,6 +9,7 @@ interface CreditCardManagerProps {
   cards: CreditCard[];
   transactions: Transaction[];
   onAddCard: (card: Omit<CreditCard, 'id'>) => Promise<void>;
+  onUpdateCard: (id: string, card: Omit<CreditCard, 'id'>) => Promise<void>;
   onDeleteCard: (id: string) => Promise<void>;
 }
 
@@ -16,17 +17,21 @@ export const CreditCardManager: React.FC<CreditCardManagerProps> = ({
   cards,
   transactions,
   onAddCard,
+  onUpdateCard,
   onDeleteCard,
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<CardTemplate | null>(CARD_TEMPLATES[0]);
   const [customName, setCustomName] = useState('');
   const [customClosingDay, setCustomClosingDay] = useState(0);
   const [customPaymentOffset, setCustomPaymentOffset] = useState(1);
   const [customPaymentDay, setCustomPaymentDay] = useState(27);
   const [customHolidayRule, setCustomHolidayRule] = useState<'next_business_day' | 'prev_business_day' | 'none'>('next_business_day');
+  const [customColor, setCustomColor] = useState('#2563eb');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // テンプレート選択
   const handleSelectTemplate = (template: CardTemplate) => {
     setSelectedTemplate(template);
     setCustomName(template.name);
@@ -34,10 +39,26 @@ export const CreditCardManager: React.FC<CreditCardManagerProps> = ({
     setCustomPaymentOffset(template.payment_month_offset);
     setCustomPaymentDay(template.payment_day);
     setCustomHolidayRule(template.holiday_rule);
+    setCustomColor(template.color);
   };
 
-  const handleOpenModal = () => {
+  // 新規登録モーダルを開く
+  const handleOpenAddModal = () => {
+    setEditingCardId(null);
     handleSelectTemplate(CARD_TEMPLATES[0]);
+    setIsModalOpen(true);
+  };
+
+  // 編集モーダルを開く
+  const handleOpenEditModal = (card: CreditCard) => {
+    setEditingCardId(card.id);
+    setSelectedTemplate(null);
+    setCustomName(card.name);
+    setCustomClosingDay(card.closing_day);
+    setCustomPaymentOffset(card.payment_month_offset);
+    setCustomPaymentDay(card.payment_day);
+    setCustomHolidayRule(card.holiday_rule);
+    setCustomColor(card.color || '#2563eb');
     setIsModalOpen(true);
   };
 
@@ -49,18 +70,24 @@ export const CreditCardManager: React.FC<CreditCardManagerProps> = ({
     }
     try {
       setIsSubmitting(true);
-      await onAddCard({
+      const cardData = {
         name: customName,
         closing_day: customClosingDay,
         payment_month_offset: customPaymentOffset,
         payment_day: customPaymentDay,
         holiday_rule: customHolidayRule,
-        color: selectedTemplate?.color || '#2563eb',
-      });
+        color: customColor,
+      };
+
+      if (editingCardId) {
+        await onUpdateCard(editingCardId, cardData);
+      } else {
+        await onAddCard(cardData);
+      }
       setIsModalOpen(false);
     } catch (err) {
       console.error(err);
-      alert('カードの登録に失敗しました');
+      alert('カード情報の保存に失敗しました');
     } finally {
       setIsSubmitting(false);
     }
@@ -83,27 +110,27 @@ export const CreditCardManager: React.FC<CreditCardManagerProps> = ({
         <div>
           <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <CardIcon className="w-5 h-5 text-blue-600" />
-            <span>クレジットカード管理 &amp; 引き落とし予定</span>
+            <span>クレジットカード設定・編集</span>
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            カード会社のルール（締め日・支払日・祝日振替）を設定し、支払予定日ごとに自動集計します。
+            カード会社の締め日・支払日・祝日振替ルールを設定・いつでも編集できます。
           </p>
         </div>
         <button
-          onClick={handleOpenModal}
+          onClick={handleOpenAddModal}
           className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-bold px-4 py-2.5 rounded-xl shadow-sm transition-all"
         >
           <Plus className="w-4 h-4" />
-          <span>カードを登録</span>
+          <span>カードを追加</span>
         </button>
       </div>
 
       {cards.length === 0 ? (
         <div className="bg-white rounded-2xl p-10 text-center border border-slate-200/80 text-slate-400">
           <CardIcon className="w-12 h-12 mx-auto mb-3 text-slate-300" />
-          <p className="font-semibold text-slate-600">クレジットカードがまだ登録されていません</p>
+          <p className="font-semibold text-slate-600">登録されたクレジットカードはありません</p>
           <p className="text-xs mt-1 text-slate-400">
-            「カードを登録」から楽天カードや三井住友カードなどのテンプレートを選んで登録してください。
+            「カードを追加」からテンプレートを選んで登録してください。
           </p>
         </div>
       ) : (
@@ -128,17 +155,26 @@ export const CreditCardManager: React.FC<CreditCardManagerProps> = ({
                       </div>
                       <h3 className="font-bold text-slate-900 text-sm sm:text-base">{card.name}</h3>
                     </div>
-                    <button
-                      onClick={() => {
-                        if (confirm(`「${card.name}」を削除しますか？`)) {
-                          onDeleteCard(card.id);
-                        }
-                      }}
-                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                      title="削除"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleOpenEditModal(card)}
+                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        title="編集"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm(`「${card.name}」を削除しますか？`)) {
+                            onDeleteCard(card.id);
+                          }
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                        title="削除"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-600 space-y-1 mb-4">
@@ -195,34 +231,38 @@ export const CreditCardManager: React.FC<CreditCardManagerProps> = ({
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
           <div className="w-full max-w-lg bg-white rounded-3xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-bold text-slate-900 mb-1">クレジットカードの登録</h3>
+            <h3 className="text-lg font-bold text-slate-900 mb-1">
+              {editingCardId ? 'クレジットカードの編集' : 'クレジットカードの登録'}
+            </h3>
             <p className="text-xs text-slate-500 mb-4">
-              カード会社ごとのテンプレートを選ぶと、締め日や支払日ルールが自動セットされます。
+              締め日や支払日ルールを設定・変更できます。
             </p>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-2">
-                  カード会社テンプレート
-                </label>
-                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1 bg-slate-50 rounded-xl border border-slate-200">
-                  {CARD_TEMPLATES.map((tmpl) => (
-                    <button
-                      key={tmpl.name}
-                      type="button"
-                      onClick={() => handleSelectTemplate(tmpl)}
-                      className={`text-left p-2 rounded-lg text-xs transition-all border ${
-                        selectedTemplate?.name === tmpl.name
-                          ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold'
-                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
-                      }`}
-                    >
-                      <p className="font-semibold truncate">{tmpl.name}</p>
-                      <p className="text-[10px] text-slate-400 truncate mt-0.5">{tmpl.description}</p>
-                    </button>
-                  ))}
+              {!editingCardId && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-2">
+                    テンプレートから自動入力（任意）
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-1 bg-slate-50 rounded-xl border border-slate-200">
+                    {CARD_TEMPLATES.map((tmpl) => (
+                      <button
+                        key={tmpl.name}
+                        type="button"
+                        onClick={() => handleSelectTemplate(tmpl)}
+                        className={`text-left p-2 rounded-lg text-xs transition-all border ${
+                          selectedTemplate?.name === tmpl.name
+                            ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold'
+                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        <p className="font-semibold truncate">{tmpl.name}</p>
+                        <p className="text-[10px] text-slate-400 truncate mt-0.5">{tmpl.description}</p>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">カード表示名</label>
@@ -309,7 +349,7 @@ export const CreditCardManager: React.FC<CreditCardManagerProps> = ({
                   disabled={isSubmitting}
                   className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-md transition-all disabled:opacity-50"
                 >
-                  {isSubmitting ? '登録中...' : '登録する'}
+                  {isSubmitting ? '保存中...' : '保存する'}
                 </button>
               </div>
             </form>

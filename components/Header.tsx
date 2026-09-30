@@ -1,9 +1,18 @@
 'use client';
 
 import React from 'react';
-import { Wallet, RefreshCw, Smartphone, Laptop, LayoutDashboard, Calendar, Briefcase, CreditCard } from 'lucide-react';
+import { 
+  Wallet, 
+  RefreshCw, 
+  Smartphone, 
+  Laptop, 
+  LayoutDashboard, 
+  HandCoins, 
+  Briefcase, 
+  Sliders 
+} from 'lucide-react';
 
-export type NavTab = 'dashboard' | 'calendar' | 'yearly' | 'cards';
+export type NavTab = 'dashboard' | 'tracker' | 'yearly' | 'settings';
 
 interface HeaderProps {
   activeTab: NavTab;
@@ -19,10 +28,10 @@ export const Header: React.FC<HeaderProps> = ({
   onRefresh,
 }) => {
   const tabs = [
-    { id: 'dashboard' as NavTab, label: '月別収支', icon: LayoutDashboard },
-    { id: 'calendar' as NavTab, label: 'カレンダー', icon: Calendar },
+    { id: 'dashboard' as NavTab, label: '月別収支・カレンダー', icon: LayoutDashboard },
+    { id: 'tracker' as NavTab, label: '振込予定・立替', icon: HandCoins },
     { id: 'yearly' as NavTab, label: '年間・バイト代', icon: Briefcase },
-    { id: 'cards' as NavTab, label: 'カード管理', icon: CreditCard },
+    { id: 'settings' as NavTab, label: 'カード・設定', icon: Sliders },
   ];
 
   return (
@@ -64,7 +73,7 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* タブナビゲーション */}
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
-        <nav className="flex space-x-1 sm:space-x-4 border-t border-slate-100 overflow-x-auto py-1">
+        <nav className="flex space-x-1 sm:space-x-3 border-t border-slate-100 overflow-x-auto py-1">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;

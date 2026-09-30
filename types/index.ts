@@ -2,6 +2,7 @@ export type TransactionType = 'expense' | 'income';
 
 export type ExpenseCategory = 
   | '大学'
+  | 'クレカ'
   | '食費' 
   | '日用品' 
   | '交通費' 
@@ -15,15 +16,14 @@ export type ExpenseCategory =
 
 export type IncomeCategory = 
   | 'バイト代'
-  | '給与' 
   | '臨時収入' 
   | 'お小遣い' 
   | '事業所得' 
   | 'その他';
 
 export type PaymentMethod = 
+  | 'クレジットカード'
   | '現金' 
-  | 'クレジットカード' 
   | '電子マネー/QR' 
   | '銀行口座' 
   | 'その他';
@@ -52,6 +52,44 @@ export interface CardTemplate {
   description: string;
 }
 
+// バイト先マスタ
+export interface Employer {
+  id: string;
+  name: string;
+  hourly_wage?: number | null;
+  payday_memo?: string; // 例: 毎月25日振込
+  color?: string;
+  created_at?: string;
+}
+
+// 振込予定管理 (家計簿収支とは独立)
+export interface ExpectedIncome {
+  id: string;
+  employer_id?: string | null;
+  employer_name: string;
+  expected_amount: number;
+  expected_pay_date: string; // YYYY-MM-DD
+  work_period?: string; // 例: 9月前半 (20h)
+  memo?: string;
+  is_confirmed: boolean; // 振込確認済みか
+  created_at?: string;
+}
+
+// 立替金管理 (5大立替: 友達・大学・会社・彼女・家族)
+export type ReimbursementTarget = '友達' | '大学' | '会社' | '彼女' | '家族';
+
+export interface Reimbursement {
+  id: string;
+  target: ReimbursementTarget;
+  person_or_purpose: string; // 相手の名前や用途
+  amount: number;
+  date: string; // 立替日 YYYY-MM-DD
+  due_date?: string; // 回収・精算予定日
+  is_settled: boolean; // 精算済みか
+  memo?: string;
+  created_at?: string;
+}
+
 export interface Transaction {
   id: string;
   date: string; // YYYY-MM-DD (利用日)
@@ -61,6 +99,8 @@ export interface Transaction {
   payment_method: PaymentMethod;
   credit_card_id?: string | null;
   billing_date?: string | null; // YYYY-MM-DD (引き落とし日)
+  employer_id?: string | null;
+  employer_name?: string | null;
   memo: string;
   created_at: string;
 }
