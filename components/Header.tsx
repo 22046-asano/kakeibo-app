@@ -9,6 +9,8 @@ import {
   Briefcase,
   Sliders,
   Plus,
+  LogOut,
+  ShieldCheck,
 } from 'lucide-react';
 
 export type NavTab = 'dashboard' | 'tracker' | 'yearly' | 'settings';
@@ -20,6 +22,8 @@ interface HeaderProps {
   onRefresh: () => void;
   onOpenCreateModal: () => void;
   unconfirmedCount?: number;
+  userEmail?: string | null;
+  onSignOut?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -28,6 +32,8 @@ export const Header: React.FC<HeaderProps> = ({
   onRefresh,
   onOpenCreateModal,
   unconfirmedCount = 0,
+  userEmail,
+  onSignOut,
 }) => {
   const tabs = [
     { id: 'dashboard' as NavTab, label: '家計簿', fullLabel: '月別収支・カレンダー', icon: LayoutDashboard },
@@ -52,12 +58,12 @@ export const Header: React.FC<HeaderProps> = ({
                   Smart Kakeibo
                 </h1>
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  同期中
+                  <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                  保護中
                 </span>
               </div>
-              <p className="text-[10px] text-slate-400 hidden sm:block">
-                クラウド連動パーソナル家計簿・資産管理
+              <p className="text-[10px] text-slate-400 hidden sm:block truncate max-w-[180px]">
+                {userEmail || 'クラウド暗号化同期'}
               </p>
             </div>
           </div>
@@ -90,7 +96,7 @@ export const Header: React.FC<HeaderProps> = ({
           </nav>
 
           {/* 右側アクション */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <button
               onClick={onRefresh}
               title="最新データに同期"
@@ -98,6 +104,18 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <RefreshCw className="w-4 h-4" />
             </button>
+
+            {onSignOut && (
+              <button
+                onClick={onSignOut}
+                title="ログアウト"
+                className="p-2 rounded-xl text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors flex items-center gap-1 text-xs font-bold"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="hidden lg:inline">ログアウト</span>
+              </button>
+            )}
+
             <button
               onClick={onOpenCreateModal}
               className="hidden sm:flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-sm shadow-indigo-500/20 transition-all active:scale-95"
@@ -109,10 +127,9 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </header>
 
-      {/* モバイル用 ボトムナビゲーションバー（マネーフォワード ME / Zaim スタイル） */}
+      {/* モバイル用 ボトムナビゲーションバー */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 pb-safe shadow-[0_-4px_16px_rgba(15,23,42,0.06)]">
         <div className="grid grid-cols-5 items-center h-16 max-w-md mx-auto">
-          {/* 左2タブ */}
           {tabs.slice(0, 2).map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -151,7 +168,6 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="text-[10px] font-bold text-indigo-600 mt-0.5">記帳</span>
           </div>
 
-          {/* 右2タブ */}
           {tabs.slice(2, 4).map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;

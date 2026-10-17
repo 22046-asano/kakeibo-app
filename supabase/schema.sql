@@ -1,102 +1,85 @@
 -- ========================================================
--- スマート家計簿 PWA 統合スキーマ（新機能対応版）
+-- スマート家計簿 PWA v6 セキュリティ強化版スキーマ（RLS完全ロック対応）
 -- ========================================================
 
--- 1. クレジットカード管理テーブル
-create table if not exists public.credit_cards (
-    id uuid primary key default gen_random_uuid(),
-    name text not null,
-    closing_day integer not null default 0,
-    payment_month_offset integer not null default 1,
-    payment_day integer not null default 27,
-    holiday_rule text not null default 'next_business_day',
-    color text default '#2563eb',
-    created_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
+-- 1. 既存テーブルへの user_id カラム追加（所有者IDの紐付け）
+alter table public.credit_cards add column if not exists user_id uuid references auth.users(id) on delete cascade default auth.uid();
+alter table public.employers add column if not exists user_id uuid references auth.users(id) on delete cascade default auth.uid();
+alter table public.transactions add column if not exists user_id uuid references auth.users(id) on delete cascade default auth.uid();
+alter table public.expected_incomes add column if not exists user_id uuid references auth.users(id) on delete cascade default auth.uid();
+alter table public.reimbursements add column if not exists user_id uuid references auth.users(id) on delete cascade default auth.uid();
 
--- 2. バイト先管理テーブル
-create table if not exists public.employers (
-    id uuid primary key default gen_random_uuid(),
-    name text not null,
-    hourly_wage integer,
-    payday_memo text default '',
-    color text default '#2563eb',
-    created_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
+-- 2. ログイン前に作成された既存データを初回ログイン時に自分のアカウントへ引き継ぐ関数
+create or replace function public.claim_unowned_records()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
 
--- 3. 家計簿トランザクションテーブル
-create table if not exists public.transactions (
-    id uuid primary key default gen_random_uuid(),
-    date date not null default current_date,
-    type text not null check (type in ('expense', 'income')),
-    category text not null,
-    amount integer not null check (amount > 0),
-    payment_method text not null default '現金',
-    credit_card_id uuid references public.credit_cards(id) on delete set null,
-    billing_date date,
-    employer_id uuid references public.employers(id) on delete set null,
-    employer_name text,
-    memo text default '',
-    created_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
+  update public.credit_cards set user_id = auth.uid() where user_id is null;
+  update public.employers set user_id = auth.uid() where user_id is null;
+  update public.transactions set user_id = auth.uid() where user_id is null;
+  update public.expected_incomes set user_id = auth.uid() where user_id is null;
+  update public.reimbursements set user_id = auth.uid() where user_id is null;
+end;
+$$;
 
--- 既存テーブルへのカラム追加（マイグレーション用）
-alter table public.transactions add column if not exists credit_card_id uuid references public.credit_cards(id) on delete set null;
-alter table public.transactions add column if not exists billing_date date;
-alter table public.transactions add column if not exists employer_id uuid references public.employers(id) on delete set null;
-alter table public.transactions add column if not exists employer_name text;
-
--- 4. 振込予定管理テーブル (実際の家計簿収支とは独立)
-create table if not exists public.expected_incomes (
-    id uuid primary key default gen_random_uuid(),
-    employer_id uuid references public.employers(id) on delete set null,
-    employer_name text not null,
-    expected_amount integer not null check (expected_amount > 0),
-    expected_pay_date date not null,
-    work_period text default '',
-    memo text default '',
-    is_confirmed boolean not null default false,
-    created_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
-
--- 5. 立替金管理テーブル (友達・大学・会社・彼女・家族)
-create table if not exists public.reimbursements (
-    id uuid primary key default gen_random_uuid(),
-    target text not null check (target in ('友達', '大学', '会社', '彼女', '家族')),
-    person_or_purpose text not null,
-    amount integer not null check (amount > 0),
-    date date not null default current_date,
-    due_date date,
-    is_settled boolean not null default false,
-    memo text default '',
-    created_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
-
--- 6. インデックスの作成
-create index if not exists idx_transactions_date on public.transactions(date desc);
-create index if not exists idx_transactions_billing_date on public.transactions(billing_date desc);
-create index if not exists idx_transactions_type on public.transactions(type);
-create index if not exists idx_transactions_category on public.transactions(category);
-create index if not exists idx_expected_incomes_date on public.expected_incomes(expected_pay_date desc);
-create index if not exists idx_reimbursements_date on public.reimbursements(date desc);
-
--- 7. 行レベルセキュリティ（RLS）の有効化
+-- 3. 行レベルセキュリティ（RLS）の有効化
 alter table public.credit_cards enable row level security;
 alter table public.employers enable row level security;
 alter table public.transactions enable row level security;
 alter table public.expected_incomes enable row level security;
 alter table public.reimbursements enable row level security;
 
--- 開発・個人用ポリシー設定（全操作を許可）
-create policy "Allow all on credit_cards" on public.credit_cards for all using (true) with check (true);
-create policy "Allow all on employers" on public.employers for all using (true) with check (true);
-create policy "Allow all on transactions" on public.transactions for all using (true) with check (true);
-create policy "Allow all on expected_incomes" on public.expected_incomes for all using (true) with check (true);
-create policy "Allow all on reimbursements" on public.reimbursements for all using (true) with check (true);
+-- 4. 従来の開発用オープンポリシー（未ログイン許可）をすべて削除
+drop policy if exists "Allow full access for anon" on public.transactions;
+drop policy if exists "Allow full access for transactions anon" on public.transactions;
+drop policy if exists "Allow full access for credit_cards anon" on public.credit_cards;
+drop policy if exists "Allow all on credit_cards" on public.credit_cards;
+drop policy if exists "Allow all on employers" on public.employers;
+drop policy if exists "Allow all on transactions" on public.transactions;
+drop policy if exists "Allow all on expected_incomes" on public.expected_incomes;
+drop policy if exists "Allow all on reimbursements" on public.reimbursements;
 
--- 8. リアルタイム同期の有効化
-alter publication supabase_realtime add table public.credit_cards;
-alter publication supabase_realtime add table public.employers;
-alter publication supabase_realtime add table public.transactions;
-alter publication supabase_realtime add table public.expected_incomes;
-alter publication supabase_realtime add table public.reimbursements;
+-- 再実行時のために既存のOwnerポリシーも一旦削除
+drop policy if exists "Owner only on credit_cards" on public.credit_cards;
+drop policy if exists "Owner only on employers" on public.employers;
+drop policy if exists "Owner only on transactions" on public.transactions;
+drop policy if exists "Owner only on expected_incomes" on public.expected_incomes;
+drop policy if exists "Owner only on reimbursements" on public.reimbursements;
+
+-- 5. 本人限定ポリシーの作成（ログイン済みの本人データのみ読み書き許可・未ログイン通信は100%遮断）
+create policy "Owner only on credit_cards"
+on public.credit_cards for all
+to authenticated
+using (user_id = auth.uid())
+with check (user_id = auth.uid());
+
+create policy "Owner only on employers"
+on public.employers for all
+to authenticated
+using (user_id = auth.uid())
+with check (user_id = auth.uid());
+
+create policy "Owner only on transactions"
+on public.transactions for all
+to authenticated
+using (user_id = auth.uid())
+with check (user_id = auth.uid());
+
+create policy "Owner only on expected_incomes"
+on public.expected_incomes for all
+to authenticated
+using (user_id = auth.uid())
+with check (user_id = auth.uid());
+
+create policy "Owner only on reimbursements"
+on public.reimbursements for all
+to authenticated
+using (user_id = auth.uid())
+with check (user_id = auth.uid());
