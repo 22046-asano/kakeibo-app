@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Wallet, Lock, Mail, KeyRound, ShieldCheck, ArrowRight, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Lock, Mail, KeyRound, ShieldCheck, ArrowRight, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface AuthGateProps {
@@ -64,7 +64,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onAuthenticated }) => {
           onAuthenticated();
         } else {
           setInfoMsg(
-            '確認メールを送信しました！メール内のリンクをクリックしてからログインしてください。（※メール確認を省略したい場合は、Supabaseの Authentication > Providers > Email の「Confirm email」をOFFにすると即座にログインできます）'
+            '確認メールを送信しました！メール内のリンクをクリックしてからログインしてください。（※メール確認を省略したい場合は、Supabaseの Authentication > Sign In / Providers > Email の「Confirm email」をOFFにすると即座にログインできます）'
           );
           setMode('login');
         }
@@ -77,26 +77,23 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onAuthenticated }) => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f4f6f9] flex flex-col justify-center items-center px-4 py-10">
+    <div className="min-h-screen bg-[#faf8f5] flex flex-col justify-center items-center px-4 py-10">
       <div className="w-full max-w-md">
-        {/* ブランドヘッダー */}
         <div className="text-center mb-6">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-900 to-indigo-950 text-white flex items-center justify-center shadow-lg mx-auto mb-3">
-            <Wallet className="w-7 h-7 text-emerald-400" />
+          <div className="w-16 h-16 rounded-3xl bg-orange-500 text-white flex items-center justify-center shadow-lg shadow-orange-500/25 mx-auto mb-3 font-black text-3xl border-4 border-white">
+            ¥
           </div>
-          <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
-            Smart Kakeibo
+          <h1 className="text-xl font-extrabold text-slate-800 tracking-tight">
+            シンプル家計簿 クラウド
           </h1>
           <p className="text-xs text-slate-500 mt-1 flex items-center justify-center gap-1">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+            <ShieldCheck className="w-3.5 h-3.5 text-orange-500" />
             <span>本人認証・RLS（行レベルセキュリティ）保護済み</span>
           </p>
         </div>
 
-        {/* ログインカード */}
-        <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.08)] border border-slate-200/80">
-          {/* モード切替ピル */}
-          <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-2xl mb-6">
+        <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-orange-200/70">
+          <div className="grid grid-cols-2 p-1 bg-orange-50 rounded-2xl mb-6 border border-orange-100">
             <button
               type="button"
               onClick={() => {
@@ -106,8 +103,8 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onAuthenticated }) => {
               }}
               className={`py-2.5 rounded-xl text-xs font-extrabold transition-all ${
                 mode === 'login'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-800'
+                  ? 'bg-orange-500 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-orange-600'
               }`}
             >
               ログイン
@@ -121,8 +118,8 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onAuthenticated }) => {
               }}
               className={`py-2.5 rounded-xl text-xs font-extrabold transition-all ${
                 mode === 'signup'
-                  ? 'bg-white text-indigo-600 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-800'
+                  ? 'bg-orange-500 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-orange-600'
               }`}
             >
               初回アカウント作成
@@ -157,7 +154,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onAuthenticated }) => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
-                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all"
                 />
               </div>
             </div>
@@ -175,7 +172,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onAuthenticated }) => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all"
                 />
               </div>
             </div>
@@ -183,26 +180,19 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onAuthenticated }) => {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-xl shadow-lg shadow-indigo-500/25 flex items-center justify-center gap-2 transition-all disabled:opacity-50 text-sm mt-2"
+              className="w-full py-3.5 bg-orange-500 hover:bg-orange-600 text-white font-extrabold rounded-2xl shadow-lg shadow-orange-500/25 flex items-center justify-center gap-2 transition-all disabled:opacity-50 text-sm mt-2"
             >
               <Lock className="w-4 h-4" />
               <span>
                 {isLoading
                   ? '認証処理中...'
                   : mode === 'login'
-                  ? '安全にログインする'
+                  ? 'ログインする'
                   : '自分専用アカウントを登録する'}
               </span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
-
-          <div className="mt-6 pt-4 border-t border-slate-100 text-[11px] text-slate-400 space-y-1">
-            <p className="font-bold text-slate-600">🔒 セキュリティ保護について</p>
-            <p>
-              ログインしない限り家計簿データの取得・追加・編集はデータベース側（Supabase RLS）で完全に遮断されます。これまで登録したデータは初回ログイン時に自動的にあなたのアカウントに紐付けられます。
-            </p>
-          </div>
         </div>
       </div>
     </div>

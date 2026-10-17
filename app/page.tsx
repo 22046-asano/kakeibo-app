@@ -19,6 +19,7 @@ import { SummaryCards } from '@/components/SummaryCards';
 import { CategoryBreakdown } from '@/components/CategoryBreakdown';
 import { TransactionList } from '@/components/TransactionList';
 import { TransactionModal } from '@/components/TransactionModal';
+import { BankBalanceModal } from '@/components/BankBalanceModal';
 import { CalendarView } from '@/components/CalendarView';
 import { YearlyView } from '@/components/YearlyView';
 import { CreditCardManager } from '@/components/CreditCardManager';
@@ -40,8 +41,8 @@ export default function Home() {
 
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
-  const [dashboardViewMode, setDashboardViewMode] = useState<'list' | 'calendar'>('list');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedDayStr, setSelectedDayStr] = useState<string | null>(null);
 
   // データステート
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
@@ -52,6 +53,7 @@ export default function Home() {
 
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [isBankBalanceModalOpen, setIsBankBalanceModalOpen] = useState<boolean>(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [initialModalDate, setInitialModalDate] = useState<string | null>(null);
 
@@ -83,7 +85,6 @@ export default function Home() {
     return { startDate, endDate };
   };
 
-  // 1. クレジットカード取得
   const fetchCards = useCallback(async () => {
     const { data, error } = await supabase
       .from('credit_cards')
@@ -94,7 +95,6 @@ export default function Home() {
     }
   }, []);
 
-  // 2. バイト先取得
   const fetchEmployers = useCallback(async () => {
     const { data, error } = await supabase
       .from('employers')
@@ -105,7 +105,6 @@ export default function Home() {
     }
   }, []);
 
-  // 3. 振込予定取得
   const fetchExpectedIncomes = useCallback(async () => {
     const { data, error } = await supabase
       .from('expected_incomes')
@@ -116,7 +115,6 @@ export default function Home() {
     }
   }, []);
 
-  // 4. 立替金取得
   const fetchReimbursements = useCallback(async () => {
     const { data, error } = await supabase
       .from('reimbursements')
@@ -127,7 +125,6 @@ export default function Home() {
     }
   }, []);
 
-  // 5. 取引データ取得
   const fetchTransactions = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -146,7 +143,6 @@ export default function Home() {
 
   const refreshAllData = useCallback(async () => {
     if (!session) return;
-    // ログイン前に作成されていた既存データがあれば自分のアカウントに自動紐付け
     await supabase.rpc('claim_unowned_records').then(() => {});
     await Promise.all([
       fetchCards(),
@@ -176,11 +172,10 @@ export default function Home() {
     }
   }, [session, refreshAllData]);
 
-  // Realtime 監視（ログイン中のみ）
   useEffect(() => {
     if (!session) return;
     const channel = supabase
-      .channel('kakeibo-realtime-v6')
+      .channel('kakeibo-realtime-v7')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => fetchTransactions())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'credit_cards' }, () => fetchCards())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'employers' }, () => fetchEmployers())
@@ -193,7 +188,6 @@ export default function Home() {
     };
   }, [session, fetchTransactions, fetchCards, fetchEmployers, fetchExpectedIncomes, fetchReimbursements]);
 
-  // ログアウト処理
   const handleSignOut = async () => {
     if (confirm('ログアウトしますか？')) {
       await supabase.auth.signOut();
@@ -214,11 +208,13 @@ export default function Home() {
       return next;
     });
     setSelectedCategory(null);
+    setSelectedDayStr(null);
   };
 
   const handleResetToday = () => {
     setCurrentDate(new Date());
     setSelectedCategory(null);
+    setSelectedDayStr(null);
   };
 
   // --- 収支登録・更新・削除 ---
@@ -387,7 +383,7 @@ export default function Home() {
   // モーダルオープン制御
   const handleOpenCreateModal = (dateStr?: string) => {
     setEditingTransaction(null);
-    setInitialModalDate(dateStr || null);
+    setInitialModalDate(dateStr || selectedDayStr || null);
     setIsModalOpen(true);
   };
 
@@ -397,19 +393,17 @@ export default function Home() {
     setIsModalOpen(true);
   };
 
-  // 認証チェック中ローディング表示
   if (isAuthChecking) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#f4f6f9]">
+      <div className="min-h-screen flex items-center justify-center bg-[#faf8f5]">
         <div className="text-center space-y-2">
-          <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-xs font-bold text-slate-500">セキュリティ認証を確認中...</p>
+          <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs font-bold text-slate-500">データを読み込み中...</p>
         </div>
       </div>
     );
   }
 
-  // 未ログイン時はログイン・アカウント登録画面を表示（データは一切取得・表示しない）
   if (!session) {
     return <AuthGate onAuthenticated={() => {}} />;
   }
@@ -426,62 +420,82 @@ export default function Home() {
         isSynced={true}
         onRefresh={refreshAllData}
         onOpenCreateModal={() => handleOpenCreateModal()}
+        onOpenBankBalanceModal={() => setIsBankBalanceModalOpen(true)}
         unconfirmedCount={pendingTrackerCount}
         userEmail={session.user.email}
         onSignOut={handleSignOut}
       />
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-4 sm:pt-6">
-        {/* 1. 家計簿ダッシュボード */}
+      <main className="max-w-6xl mx-auto px-3 sm:px-6 pt-3 sm:pt-5">
+        {/* 1. カレンダー ＆ 明細一体型メイン画面（シンプル家計簿スタイル） */}
         {activeTab === 'dashboard' && (
           <div>
             <MonthSelector
               currentDate={currentDate}
               onChangeMonth={handleChangeMonth}
               onResetToday={handleResetToday}
-              viewMode={dashboardViewMode}
-              onChangeViewMode={setDashboardViewMode}
             />
 
-            <SummaryCards transactions={monthlyTransactions} />
+            <SummaryCards
+              monthlyTransactions={monthlyTransactions}
+              allTransactions={allTransactions}
+              onOpenBankBalanceModal={() => setIsBankBalanceModalOpen(true)}
+            />
 
-            {dashboardViewMode === 'list' ? (
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-                <div className="lg:col-span-5">
+            {/* シンプル家計簿と同じく「カレンダー」と「明細リスト」を1画面に配置 */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+              <div className="lg:col-span-7">
+                <CalendarView
+                  currentDate={currentDate}
+                  transactions={allTransactions}
+                  cards={cards}
+                  selectedDayStr={selectedDayStr}
+                  onSelectDay={setSelectedDayStr}
+                  onAddTransactionForDate={(d) => handleOpenCreateModal(d)}
+                />
+
+                {/* PC画面では左下に円グラフも同時表示 */}
+                <div className="hidden lg:block">
                   <CategoryBreakdown
                     transactions={monthlyTransactions}
                     selectedCategory={selectedCategory}
                     onSelectCategory={setSelectedCategory}
                   />
                 </div>
-                <div className="lg:col-span-7">
-                  <TransactionList
-                    transactions={monthlyTransactions}
-                    cards={cards}
-                    selectedCategory={selectedCategory}
-                    onClearCategory={() => setSelectedCategory(null)}
-                    onEdit={handleOpenEditModal}
-                    onDelete={handleDeleteTransaction}
-                    onOpenCreate={() => handleOpenCreateModal()}
-                  />
-                </div>
               </div>
-            ) : (
-              <CalendarView
-                currentDate={currentDate}
-                transactions={allTransactions}
-                cards={cards}
-                onChangeMonth={handleChangeMonth}
-                onResetToday={handleResetToday}
-                onSelectTransaction={handleOpenEditModal}
-                onDeleteTransaction={handleDeleteTransaction}
-                onAddTransactionForDate={(d) => handleOpenCreateModal(d)}
-              />
-            )}
+
+              <div className="lg:col-span-5">
+                <TransactionList
+                  transactions={selectedDayStr ? allTransactions : monthlyTransactions}
+                  cards={cards}
+                  selectedCategory={selectedCategory}
+                  selectedDayStr={selectedDayStr}
+                  onClearCategory={() => setSelectedCategory(null)}
+                  onClearDay={() => setSelectedDayStr(null)}
+                  onEdit={handleOpenEditModal}
+                  onDelete={handleDeleteTransaction}
+                  onOpenCreate={() => handleOpenCreateModal()}
+                />
+              </div>
+            </div>
           </div>
         )}
 
-        {/* 2. 振込予定 ＆ 立替金管理タブ */}
+        {/* 2. レポート・年間バイト代扶養タブ */}
+        {activeTab === 'yearly' && (
+          <YearlyView
+            transactions={allTransactions}
+            monthlyTransactions={monthlyTransactions}
+            currentDate={currentDate}
+            onChangeMonth={handleChangeMonth}
+            onResetToday={handleResetToday}
+            employers={employers}
+            onEditTransaction={handleOpenEditModal}
+            onDeleteTransaction={handleDeleteTransaction}
+          />
+        )}
+
+        {/* 3. 立替金 ＆ 振込予定管理タブ */}
         {activeTab === 'tracker' && (
           <AdvancePaymentTracker
             expectedIncomes={expectedIncomes}
@@ -496,16 +510,6 @@ export default function Home() {
             onUpdateReimbursement={handleUpdateReimbursement}
             onToggleSettleReimbursement={handleToggleSettleReimbursement}
             onDeleteReimbursement={handleDeleteReimbursement}
-          />
-        )}
-
-        {/* 3. 年間・バイト代タブ */}
-        {activeTab === 'yearly' && (
-          <YearlyView
-            transactions={allTransactions}
-            employers={employers}
-            onEditTransaction={handleOpenEditModal}
-            onDeleteTransaction={handleDeleteTransaction}
           />
         )}
 
@@ -535,13 +539,14 @@ export default function Home() {
       <div className="hidden md:block fixed bottom-8 right-8 z-40">
         <button
           onClick={() => handleOpenCreateModal()}
-          className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-extrabold px-6 py-4 rounded-2xl shadow-xl shadow-indigo-500/30 hover:shadow-2xl transition-all transform hover:-translate-y-0.5 active:translate-y-0"
+          className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-extrabold px-6 py-4 rounded-2xl shadow-xl shadow-orange-500/30 hover:shadow-2xl transition-all transform hover:-translate-y-0.5 active:translate-y-0"
         >
           <Plus className="w-5 h-5 stroke-[2.5px]" />
-          <span>収支を記帳</span>
+          <span>収支を入力</span>
         </button>
       </div>
 
+      {/* 収支入力・編集モーダル */}
       <TransactionModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -551,6 +556,16 @@ export default function Home() {
         initialDate={initialModalDate}
         cards={cards}
         employers={employers}
+      />
+
+      {/* 銀行預金残高の入力・つじつま合わせ（自動調整）モーダル */}
+      <BankBalanceModal
+        isOpen={isBankBalanceModalOpen}
+        onClose={() => setIsBankBalanceModalOpen(false)}
+        transactions={allTransactions}
+        cards={cards}
+        onAddAdjustment={(adj) => handleSubmitTransaction(adj)}
+        onDeleteTransaction={handleDeleteTransaction}
       />
     </div>
   );

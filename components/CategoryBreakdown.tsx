@@ -11,18 +11,19 @@ interface CategoryBreakdownProps {
 }
 
 export const CATEGORY_HEX_COLORS: Record<string, string> = {
-  '大学': '#7c3aed',
+  '食費': '#f97316',
+  '大学': '#8b5cf6',
   'クレカ': '#2563eb',
-  '食費': '#f59e0b',
   '日用品': '#10b981',
   '交通費': '#0ea5e9',
-  '趣味・娯楽': '#8b5cf6',
+  '趣味・娯楽': '#ec4899',
   '水道・光熱費': '#eab308',
   '通信費': '#3b82f6',
-  '住居費': '#4f46e5',
-  '医療・健康': '#f43f5e',
-  '衣服・美容': '#ec4899',
-  'その他': '#64748b',
+  '住居費': '#6366f1',
+  '医療・健康': '#14b8a6',
+  '衣服・美容': '#f43f5e',
+  'その他': '#94a3b8',
+  '調整金': '#64748b',
 };
 
 export const CategoryBreakdown: React.FC<CategoryBreakdownProps> = ({
@@ -30,7 +31,10 @@ export const CategoryBreakdown: React.FC<CategoryBreakdownProps> = ({
   selectedCategory = null,
   onSelectCategory,
 }) => {
-  const expenseTransactions = transactions.filter((t) => t.type === 'expense');
+  // 調整金は通常の支出グラフから除外する
+  const expenseTransactions = transactions.filter(
+    (t) => t.type === 'expense' && t.category !== '調整金'
+  );
   const totalExpense = expenseTransactions.reduce((sum, t) => sum + t.amount, 0);
 
   const categoryTotals = expenseTransactions.reduce<Record<string, number>>((acc, t) => {
@@ -43,39 +47,38 @@ export const CategoryBreakdown: React.FC<CategoryBreakdownProps> = ({
       category,
       amount,
       percentage: totalExpense > 0 ? (amount / totalExpense) * 100 : 0,
-      color: CATEGORY_HEX_COLORS[category] || '#64748b',
+      color: CATEGORY_HEX_COLORS[category] || '#94a3b8',
     }))
     .sort((a, b) => b.amount - a.amount);
 
-  // SVGドーナツチャート用のセグメント計算
   const radius = 58;
   const circumference = 2 * Math.PI * radius;
   let cumulativePercent = 0;
 
   return (
-    <div className="bg-white rounded-3xl p-5 shadow-[0_2px_12px_-4px_rgba(15,23,42,0.06)] border border-slate-200/80">
+    <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <PieChart className="w-4 h-4 text-indigo-600" />
-          <h2 className="text-sm font-bold text-slate-900">カテゴリ別支出内訳</h2>
+          <PieChart className="w-4 h-4 text-orange-500" />
+          <h2 className="text-sm font-extrabold text-slate-800">カテゴリー別支出グラフ</h2>
         </div>
         {selectedCategory && onSelectCategory && (
           <button
             onClick={() => onSelectCategory(null)}
-            className="text-xs font-bold text-indigo-600 hover:underline"
+            className="text-xs font-bold text-orange-600 hover:underline"
           >
-            絞り込み解除
+            すべて表示に戻す
           </button>
         )}
       </div>
 
       {sortedCategories.length === 0 ? (
         <div className="py-12 text-center text-slate-400">
-          <p className="text-xs">今月の支出データはまだありません</p>
+          <p className="text-xs">この月の支出データはまだありません</p>
         </div>
       ) : (
         <div>
-          {/* ドーナツチャート (Zaim / マネーフォワード スタイル) */}
+          {/* シンプル家計簿風 円グラフ */}
           <div className="relative w-44 h-44 mx-auto my-2 flex items-center justify-center">
             <svg className="w-full h-full -rotate-90" viewBox="0 0 140 140">
               <circle
@@ -83,8 +86,8 @@ export const CategoryBreakdown: React.FC<CategoryBreakdownProps> = ({
                 cy="70"
                 r={radius}
                 fill="transparent"
-                stroke="#f1f5f9"
-                strokeWidth="16"
+                stroke="#f8fafc"
+                strokeWidth="18"
               />
               {sortedCategories.map((item) => {
                 const strokeDasharray = `${(item.percentage / 100) * circumference} ${circumference}`;
@@ -99,7 +102,7 @@ export const CategoryBreakdown: React.FC<CategoryBreakdownProps> = ({
                     r={radius}
                     fill="transparent"
                     stroke={item.color}
-                    strokeWidth={selectedCategory === item.category ? '19' : '15'}
+                    strokeWidth={selectedCategory === item.category ? '21' : '17'}
                     strokeDasharray={strokeDasharray}
                     strokeDashoffset={strokeDashoffset}
                     className="transition-all duration-500 cursor-pointer hover:opacity-85"
@@ -115,7 +118,7 @@ export const CategoryBreakdown: React.FC<CategoryBreakdownProps> = ({
               <span className="text-[10px] font-bold text-slate-400">
                 {selectedCategory ? selectedCategory : '支出合計'}
               </span>
-              <span className="text-sm sm:text-base font-extrabold text-slate-900 tabular-nums mt-0.5">
+              <span className="text-sm sm:text-base font-extrabold text-slate-800 tabular-nums mt-0.5">
                 ¥
                 {(selectedCategory
                   ? categoryTotals[selectedCategory] || 0
@@ -125,14 +128,8 @@ export const CategoryBreakdown: React.FC<CategoryBreakdownProps> = ({
             </div>
           </div>
 
-          {onSelectCategory && (
-            <p className="text-[11px] text-center text-slate-400 mb-4">
-              カテゴリをタップすると右側の明細を絞り込めます
-            </p>
-          )}
-
-          {/* カテゴリ別ランキングリスト */}
-          <div className="space-y-2.5 pt-2 border-t border-slate-100">
+          {/* カテゴリ別リスト */}
+          <div className="divide-y divide-slate-100 mt-4 border-t border-slate-100">
             {sortedCategories.map(({ category, amount, percentage, color }) => {
               const isSelected = selectedCategory === category;
               return (
@@ -141,32 +138,26 @@ export const CategoryBreakdown: React.FC<CategoryBreakdownProps> = ({
                   onClick={() =>
                     onSelectCategory && onSelectCategory(isSelected ? null : category)
                   }
-                  className={`p-2 rounded-xl transition-all ${
-                    onSelectCategory ? 'cursor-pointer hover:bg-slate-50' : ''
-                  } ${isSelected ? 'bg-indigo-50/70 ring-1 ring-indigo-200' : ''}`}
+                  className={`py-2.5 px-2 transition-all flex items-center justify-between ${
+                    onSelectCategory ? 'cursor-pointer hover:bg-orange-50/40' : ''
+                  } ${isSelected ? 'bg-orange-50/80 rounded-xl font-bold' : ''}`}
                 >
-                  <div className="flex justify-between items-center text-xs mb-1">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="w-3 h-3 rounded-full shrink-0"
-                        style={{ backgroundColor: color }}
-                      />
-                      <span className="font-bold text-slate-800">{category}</span>
-                    </div>
-                    <div className="flex items-center gap-2.5 tabular-nums">
-                      <span className="font-extrabold text-slate-900">
-                        ¥{amount.toLocaleString()}
-                      </span>
-                      <span className="text-slate-400 text-[11px] w-11 text-right font-semibold">
-                        {percentage.toFixed(1)}%
-                      </span>
-                    </div>
-                  </div>
-                  <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all duration-500"
-                      style={{ width: `${percentage}%`, backgroundColor: color }}
+                  <div className="flex items-center gap-2.5">
+                    <span
+                      className="w-3.5 h-3.5 rounded-sm shrink-0"
+                      style={{ backgroundColor: color }}
                     />
+                    <span className="text-xs sm:text-sm font-bold text-slate-800">
+                      {category}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 tabular-nums">
+                    <span className="text-xs sm:text-sm font-extrabold text-slate-900">
+                      ¥{amount.toLocaleString()}
+                    </span>
+                    <span className="text-slate-400 text-xs w-12 text-right font-semibold">
+                      {percentage.toFixed(1)}%
+                    </span>
                   </div>
                 </div>
               );

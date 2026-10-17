@@ -1,11 +1,11 @@
 {
-  "name": "スマート家計簿 PWA",
+  "name": "シンプル家計簿 クラウド",
   "short_name": "家計簿",
-  "description": "PCとスマホで完全リアルタイム連動するPWA家計簿アプリ",
+  "description": "PCとスマホでリアルタイム連動するシンプル家計簿アプリ",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#2563eb",
+  "background_color": "#faf8f5",
+  "theme_color": "#f97316",
   "orientation": "portrait",
   "icons": [
     {

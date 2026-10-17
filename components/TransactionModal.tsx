@@ -31,17 +31,17 @@ interface TransactionModalProps {
 }
 
 const EXPENSE_CATEGORIES = [
-  '大学',
-  'クレカ',
   '食費',
   '日用品',
+  '大学',
+  'クレカ',
   '交通費',
   '趣味・娯楽',
+  '衣服・美容',
+  '医療・健康',
   '水道・光熱費',
   '通信費',
   '住居費',
-  '医療・健康',
-  '衣服・美容',
   'その他',
 ];
 
@@ -99,7 +99,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       const cardId = editingTransaction.credit_card_id || cards[0]?.id || '';
       setSelectedCardId(cardId);
 
-      // 引き落とし日の初期設定
       const cardObj = cards.find((c) => c.id === cardId);
       const autoDate =
         cardObj && editingTransaction.date
@@ -145,6 +144,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
   const handleTypeChange = (newType: TransactionType) => {
     setType(newType);
+    if (category === '調整金') return;
     if (newType === 'expense') {
       if (!EXPENSE_CATEGORIES.includes(category)) {
         setCategory('食費');
@@ -158,7 +158,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     }
   };
 
-  // クレジットカード引き落とし予定日の自動計算
   const selectedCard = cards.find((c) => c.id === selectedCardId);
   const autoCalculatedBillingDate =
     type === 'expense' && paymentMethod === 'クレジットカード' && selectedCard && date
@@ -206,12 +205,12 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           type,
           category,
           amount: numAmount,
-          payment_method: type === 'income' ? '銀行口座' : paymentMethod,
+          payment_method: type === 'income' || category === '調整金' ? '銀行口座' : paymentMethod,
           credit_card_id:
-            type === 'expense' && paymentMethod === 'クレジットカード'
+            type === 'expense' && paymentMethod === 'クレジットカード' && category !== '調整金'
               ? selectedCardId || null
               : null,
-          billing_date: effectiveBillingDate,
+          billing_date: category === '調整金' ? null : effectiveBillingDate,
           employer_id: resolvedEmployerId,
           employer_name: resolvedEmployerName,
           memo,
@@ -229,20 +228,43 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
   if (!isOpen) return null;
 
-  const currentCategories = type === 'expense' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
+  const currentCategories =
+    category === '調整金'
+      ? ['調整金', ...(type === 'expense' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES)]
+      : type === 'expense'
+      ? EXPENSE_CATEGORIES
+      : INCOME_CATEGORIES;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/50 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/45 backdrop-blur-sm">
       <div className="w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 shadow-2xl max-h-[92vh] overflow-y-auto">
+        {/* シンプル家計簿風 上部バー（支出 / 収入 セグメント） */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-          <div>
-            <h3 className="font-extrabold text-slate-900 text-base sm:text-lg">
-              {editingTransaction ? '収支明細の編集・変更' : '収支を記帳'}
-            </h3>
-            <p className="text-[11px] text-slate-400">
-              登録後もすべての項目（金額・日付・カード引落日・カテゴリ等）を変更できます
-            </p>
+          <div className="flex bg-orange-50 p-1 rounded-xl border border-orange-200/70 w-56">
+            <button
+              type="button"
+              onClick={() => handleTypeChange('expense')}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-extrabold transition-all ${
+                type === 'expense'
+                  ? 'bg-orange-500 text-white shadow-sm'
+                  : 'text-orange-700 hover:bg-orange-100/50'
+              }`}
+            >
+              支出
+            </button>
+            <button
+              type="button"
+              onClick={() => handleTypeChange('income')}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-extrabold transition-all ${
+                type === 'income'
+                  ? 'bg-orange-500 text-white shadow-sm'
+                  : 'text-orange-700 hover:bg-orange-100/50'
+              }`}
+            >
+              収入
+            </button>
           </div>
+
           <button
             onClick={onClose}
             className="p-2 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
@@ -251,129 +273,121 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 pt-4">
-          {/* 支出 / 収入 切り替えピル */}
-          <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-2xl">
-            <button
-              type="button"
-              onClick={() => handleTypeChange('expense')}
-              className={`py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all ${
-                type === 'expense'
-                  ? 'bg-rose-500 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              支出
-            </button>
-            <button
-              type="button"
-              onClick={() => handleTypeChange('income')}
-              className={`py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all ${
-                type === 'income'
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              収入
-            </button>
-          </div>
-
-          {/* 金額入力 ＆ クイック加算ボタン */}
-          <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80">
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-bold text-slate-600">金額 (円)</label>
-              {amount && (
-                <button
-                  type="button"
-                  onClick={() => setAmount('')}
-                  className="text-[11px] font-bold text-slate-400 hover:text-rose-500"
-                >
-                  クリア
-                </button>
-              )}
-            </div>
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-extrabold text-xl">
-                ¥
-              </span>
-              <input
-                type="number"
-                inputMode="numeric"
-                required
-                placeholder="0"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xl font-extrabold text-slate-900 tabular-nums focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-              />
-            </div>
-
-            {/* クイック金額ボタン */}
-            <div className="flex flex-wrap gap-1.5 mt-2">
-              {QUICK_AMOUNTS.map((val) => (
-                <button
-                  key={val}
-                  type="button"
-                  onClick={() => handleQuickAddAmount(val)}
-                  className="px-2.5 py-1 bg-white hover:bg-indigo-50 text-slate-600 hover:text-indigo-700 border border-slate-200/80 rounded-lg text-[11px] font-bold tabular-nums transition-colors"
-                >
-                  +{val.toLocaleString()}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* 日付 & 支払・受取方法 */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1">
-                {type === 'expense' ? '利用日 / 発生日' : '入金日 / 振込日'}
+        <form onSubmit={handleSubmit} className="space-y-4 pt-3">
+          {/* シンプル家計簿風 行フォーム（日付・金額・メモ） */}
+          <div className="divide-y divide-slate-100 border border-slate-200/80 rounded-2xl overflow-hidden bg-white">
+            {/* 日付行 */}
+            <div className="flex items-center justify-between px-3.5 py-2.5">
+              <label className="text-xs font-extrabold text-slate-600 w-20 shrink-0">
+                日付
               </label>
               <input
                 type="date"
                 required
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 tabular-nums focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+                className="flex-1 text-right bg-transparent text-sm font-extrabold text-slate-800 tabular-nums focus:outline-none"
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1">
-                {type === 'expense' ? '支払方法' : '受取方法'}
-              </label>
-              {type === 'expense' ? (
-                <select
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white"
-                >
-                  {EXPENSE_PAYMENT_METHODS.map((method) => (
-                    <option key={method} value={method}>
-                      {method}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <div className="w-full px-3.5 py-2.5 bg-emerald-50/70 border border-emerald-200 rounded-xl text-sm font-bold text-emerald-800">
-                  銀行口座振込
+            {/* 金額行 */}
+            <div className="px-3.5 py-3 bg-orange-50/30">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-extrabold text-slate-600 w-20 shrink-0">
+                  金額
+                </label>
+                <div className="flex-1 flex items-center justify-end gap-1">
+                  <span className="text-orange-500 font-extrabold text-lg">¥</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    required
+                    placeholder="0"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    className="w-full text-right bg-transparent text-2xl font-extrabold text-slate-900 tabular-nums focus:outline-none"
+                  />
+                  {amount && (
+                    <button
+                      type="button"
+                      onClick={() => setAmount('')}
+                      className="ml-1 text-xs font-bold text-slate-400 hover:text-rose-500 px-1.5 py-0.5 rounded bg-slate-100"
+                    >
+                      クリア
+                    </button>
+                  )}
                 </div>
-              )}
+              </div>
+              <div className="flex justify-end flex-wrap gap-1.5 mt-2">
+                {QUICK_AMOUNTS.map((val) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => handleQuickAddAmount(val)}
+                    className="px-2 py-0.5 bg-white hover:bg-orange-50 text-slate-600 hover:text-orange-600 border border-slate-200 rounded-lg text-[11px] font-bold tabular-nums transition-colors"
+                  >
+                    +{val.toLocaleString()}
+                  </button>
+                ))}
+              </div>
             </div>
+
+            {/* メモ行 */}
+            <div className="flex items-center justify-between px-3.5 py-2.5">
+              <label className="text-xs font-extrabold text-slate-600 w-20 shrink-0">
+                メモ
+              </label>
+              <input
+                type="text"
+                placeholder="品目・お店の名前など（任意）"
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+                className="flex-1 text-right bg-transparent text-sm font-medium text-slate-800 focus:outline-none"
+              />
+            </div>
+
+            {/* 支払・受取方法行 */}
+            {category !== '調整金' && (
+              <div className="flex items-center justify-between px-3.5 py-2.5">
+                <label className="text-xs font-extrabold text-slate-600 w-24 shrink-0">
+                  {type === 'expense' ? '支払方法' : '受取方法'}
+                </label>
+                {type === 'expense' ? (
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+                    className="text-right bg-transparent text-sm font-bold text-orange-600 focus:outline-none"
+                  >
+                    {EXPENSE_PAYMENT_METHODS.map((method) => (
+                      <option key={method} value={method}>
+                        {method}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="text-xs font-bold text-sky-700 bg-sky-50 px-2.5 py-1 rounded-lg">
+                    銀行口座振込
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* カテゴリ選択 */}
+          {/* カテゴリーグリッド（シンプル家計簿スタイル） */}
           <div>
-            <label className="block text-xs font-bold text-slate-600 mb-2">カテゴリ</label>
+            <label className="block text-xs font-extrabold text-slate-600 mb-2">
+              カテゴリー
+            </label>
             <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
               {currentCategories.map((cat) => (
                 <button
                   key={cat}
                   type="button"
                   onClick={() => setCategory(cat)}
-                  className={`py-2 px-2 text-xs font-bold rounded-xl border transition-all truncate ${
+                  className={`py-2.5 px-2 text-xs font-extrabold rounded-xl border transition-all truncate ${
                     category === cat
-                      ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
-                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                      ? 'bg-orange-500 border-orange-500 text-white shadow-sm'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-orange-50/40'
                   }`}
                 >
                   {cat}
@@ -382,12 +396,12 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
           </div>
 
-          {/* バイト代の場合: バイト先選択 または 手入力 */}
+          {/* バイト代の場合: バイト先選択 */}
           {type === 'income' && category === 'バイト代' && (
-            <div className="bg-indigo-50/70 border border-indigo-200 rounded-2xl p-3.5 space-y-2.5">
-              <label className="block text-xs font-extrabold text-indigo-900 flex items-center gap-1.5">
-                <Building2 className="w-3.5 h-3.5 text-indigo-600" />
-                <span>バイト先の選択・変更</span>
+            <div className="bg-sky-50/70 border border-sky-200 rounded-2xl p-3.5 space-y-2">
+              <label className="block text-xs font-extrabold text-sky-900 flex items-center gap-1.5">
+                <Building2 className="w-3.5 h-3.5 text-sky-600" />
+                <span>バイト先の選択</span>
               </label>
 
               <div className="grid grid-cols-2 gap-2">
@@ -398,7 +412,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                     onClick={() => setSelectedEmployerId(emp.id)}
                     className={`p-2 rounded-xl text-xs font-bold border transition-all text-left truncate ${
                       selectedEmployerId === emp.id
-                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                        ? 'bg-sky-600 text-white border-sky-600 shadow-sm'
                         : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                     }`}
                   >
@@ -410,7 +424,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   onClick={() => setSelectedEmployerId('custom')}
                   className={`p-2 rounded-xl text-xs font-bold border transition-all text-left truncate ${
                     selectedEmployerId === 'custom'
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                      ? 'bg-sky-600 text-white border-sky-600 shadow-sm'
                       : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                   }`}
                 >
@@ -424,17 +438,17 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   value={customEmployerName}
                   onChange={(e) => setCustomEmployerName(e.target.value)}
                   placeholder="バイト先名を入力（例: 単発バイト、○○塾など）"
-                  className="w-full px-3 py-2 bg-white border border-indigo-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 bg-white border border-sky-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none"
                 />
               )}
             </div>
           )}
 
-          {/* クレジットカード選択 & 引き落とし日（自動計算＋手動変更対応） */}
-          {type === 'expense' && paymentMethod === 'クレジットカード' && (
+          {/* クレジットカード選択 & 引き落とし日 */}
+          {type === 'expense' && paymentMethod === 'クレジットカード' && category !== '調整金' && (
             <div className="bg-blue-50/70 border border-blue-200 rounded-2xl p-3.5 space-y-2.5">
               <label className="block text-xs font-extrabold text-blue-900">
-                決済クレジットカード ＆ 引き落とし日
+                利用カード ＆ 口座引き落とし日
               </label>
 
               {cards.length === 0 ? (
@@ -449,7 +463,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                       setSelectedCardId(e.target.value);
                       setIsManualBillingDate(false);
                     }}
-                    className="w-full px-3 py-2 bg-white border border-blue-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 bg-white border border-blue-200 rounded-xl text-xs font-bold text-slate-900"
                   >
                     {cards.map((card) => (
                       <option key={card.id} value={card.id}>
@@ -460,11 +474,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                     ))}
                   </select>
 
-                  <div className="bg-white/90 px-3 py-2 rounded-xl border border-blue-100 space-y-2">
+                  <div className="bg-white/90 px-3 py-2 rounded-xl border border-blue-100 space-y-1.5">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-blue-800 font-semibold flex items-center gap-1">
                         <CardIcon className="w-3.5 h-3.5 text-blue-600" />
-                        <span>引き落とし予定日:</span>
+                        <span>引き落とし予定日（変更可）:</span>
                       </span>
                       {isManualBillingDate && (
                         <button
@@ -481,39 +495,22 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="date"
-                        value={effectiveBillingDate || ''}
-                        onChange={(e) => {
-                          setIsManualBillingDate(true);
-                          setCustomBillingDate(e.target.value);
-                        }}
-                        className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-900 tabular-nums"
-                      />
-                    </div>
-                    <p className="text-[10px] text-slate-400">
-                      ※カードの締日・支払日・土日祝ルールから自動計算されていますが、必要に応じて手動で日付を変更できます。
-                    </p>
+                    <input
+                      type="date"
+                      value={effectiveBillingDate || ''}
+                      onChange={(e) => {
+                        setIsManualBillingDate(true);
+                        setCustomBillingDate(e.target.value);
+                      }}
+                      className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-900 tabular-nums"
+                    />
                   </div>
                 </>
               )}
             </div>
           )}
 
-          {/* メモ */}
-          <div>
-            <label className="block text-xs font-bold text-slate-600 mb-1">メモ (任意)</label>
-            <input
-              type="text"
-              placeholder="店名・用途・詳細メモ"
-              value={memo}
-              onChange={(e) => setMemo(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white"
-            />
-          </div>
-
-          {/* フッターボタン（保存 ＆ 編集時は削除ボタン） */}
+          {/* 保存・削除ボタン（シンプル家計簿風 オレンジボタン） */}
           <div className="pt-2 flex items-center gap-2.5">
             {editingTransaction && onDelete && (
               <button
@@ -524,7 +521,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                     onClose();
                   }
                 }}
-                className="px-4 py-3.5 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors text-xs sm:text-sm shrink-0"
+                className="px-4 py-3.5 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold rounded-2xl flex items-center justify-center gap-1.5 transition-colors text-xs sm:text-sm shrink-0"
               >
                 <Trash2 className="w-4 h-4" />
                 <span>削除</span>
@@ -534,7 +531,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex-1 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-xl shadow-lg shadow-indigo-500/25 flex items-center justify-center gap-2 transition-all disabled:opacity-50 text-sm"
+              className="flex-1 py-3.5 bg-orange-500 hover:bg-orange-600 text-white font-extrabold rounded-2xl shadow-lg shadow-orange-500/25 flex items-center justify-center gap-2 transition-all disabled:opacity-50 text-sm"
             >
               <Check className="w-5 h-5" />
               <span>
@@ -542,7 +539,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   ? '保存中...'
                   : editingTransaction
                   ? '変更を保存する'
-                  : '記帳する'}
+                  : `${type === 'expense' ? '支出' : '収入'}を入力する`}
               </span>
             </button>
           </div>

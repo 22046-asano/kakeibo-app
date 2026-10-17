@@ -3,8 +3,8 @@
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 15, 23, 42;
-  --background-rgb: 244, 246, 249;
+  --foreground-rgb: 30, 41, 59;
+  --background-rgb: 250, 248, 245;
 }
 
 body {
@@ -15,7 +15,7 @@ body {
   font-feature-settings: "palt";
 }
 
-/* 金額表示の桁揃え（フィンテックアプリ標準） */
+/* 金額表示の桁揃え */
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
@@ -25,7 +25,6 @@ input, select, textarea {
   font-size: 16px;
 }
 
-/* 横スクロールバー非表示ユーティリティ */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }

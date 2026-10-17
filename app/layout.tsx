@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "スマート家計簿 PWA",
+  title: "シンプル家計簿 クラウド",
   description: "PCとスマホで完全リアルタイム連動するクラウド家計簿",
   manifest: "/manifest.json",
   appleWebApp: {
@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#2563eb",
+  themeColor: "#f97316",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -36,7 +36,7 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
       </head>
-      <body className="min-h-screen bg-slate-50 antialiased pb-20 sm:pb-8">
+      <body className="min-h-screen bg-[#faf8f5] antialiased pb-20 sm:pb-8">
         {children}
         <script
           dangerouslySetInnerHTML={{
