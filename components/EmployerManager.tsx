@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Building2, Plus, Trash2, Edit2, Clock, Calendar } from 'lucide-react';
+import { Building2, Plus, Trash2, Edit2, Clock, Calendar, X } from 'lucide-react';
 import { Employer } from '@/types';
 
 interface EmployerManagerProps {
@@ -10,6 +10,17 @@ interface EmployerManagerProps {
   onUpdateEmployer: (id: string, emp: Omit<Employer, 'id'>) => Promise<void>;
   onDeleteEmployer: (id: string) => Promise<void>;
 }
+
+const COLOR_SWATCHES = [
+  '#4f46e5',
+  '#0891b2',
+  '#059669',
+  '#d97706',
+  '#e11d48',
+  '#7c3aed',
+  '#2563eb',
+  '#0f172a',
+];
 
 export const EmployerManager: React.FC<EmployerManagerProps> = ({
   employers,
@@ -22,7 +33,7 @@ export const EmployerManager: React.FC<EmployerManagerProps> = ({
   const [name, setName] = useState('');
   const [hourlyWage, setHourlyWage] = useState('');
   const [paydayMemo, setPaydayMemo] = useState('');
-  const [color, setColor] = useState('#2563eb');
+  const [color, setColor] = useState('#4f46e5');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleOpenAdd = () => {
@@ -30,7 +41,7 @@ export const EmployerManager: React.FC<EmployerManagerProps> = ({
     setName('');
     setHourlyWage('');
     setPaydayMemo('');
-    setColor('#2563eb');
+    setColor('#4f46e5');
     setIsModalOpen(true);
   };
 
@@ -39,7 +50,7 @@ export const EmployerManager: React.FC<EmployerManagerProps> = ({
     setName(emp.name);
     setHourlyWage(emp.hourly_wage ? emp.hourly_wage.toString() : '');
     setPaydayMemo(emp.payday_memo || '');
-    setColor(emp.color || '#2563eb');
+    setColor(emp.color || '#4f46e5');
     setIsModalOpen(true);
   };
 
@@ -54,7 +65,7 @@ export const EmployerManager: React.FC<EmployerManagerProps> = ({
       setIsSubmitting(true);
       const wageNum = hourlyWage ? parseInt(hourlyWage, 10) : undefined;
       const data = {
-        name,
+        name: name.trim(),
         hourly_wage: isNaN(wageNum as number) ? null : wageNum,
         payday_memo: paydayMemo,
         color,
@@ -75,20 +86,20 @@ export const EmployerManager: React.FC<EmployerManagerProps> = ({
   };
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div className="space-y-5">
+      <div className="bg-white rounded-3xl p-5 shadow-[0_2px_12px_-4px_rgba(15,23,42,0.06)] border border-slate-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+          <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
             <Building2 className="w-5 h-5 text-indigo-600" />
-            <span>バイト先管理</span>
+            <span>バイト先マスタ管理・編集</span>
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            複数のバイト先を登録し、収入の記録や年間集計で分けて管理できます。
+            登録したバイト先の名称や時給・給料日メモも後から自由に変更できます
           </p>
         </div>
         <button
           onClick={handleOpenAdd}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-bold px-4 py-2.5 rounded-xl shadow-sm transition-all"
+          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-extrabold px-4 py-2.5 rounded-2xl shadow-sm transition-all shrink-0"
         >
           <Plus className="w-4 h-4" />
           <span>バイト先を追加</span>
@@ -96,11 +107,11 @@ export const EmployerManager: React.FC<EmployerManagerProps> = ({
       </div>
 
       {employers.length === 0 ? (
-        <div className="bg-white rounded-2xl p-10 text-center border border-slate-200/80 text-slate-400">
+        <div className="bg-white rounded-3xl p-10 text-center border border-slate-200/80 text-slate-400">
           <Building2 className="w-12 h-12 mx-auto mb-3 text-slate-300" />
-          <p className="font-semibold text-slate-600">登録されたバイト先はありません</p>
+          <p className="font-bold text-slate-600">登録されたバイト先はありません</p>
           <p className="text-xs mt-1 text-slate-400">
-            塾講師、カフェ、TAなど、お持ちのバイト先を登録してください。
+            塾講師、カフェ、大学TAなど、複数のバイト先を登録して管理できます
           </p>
         </div>
       ) : (
@@ -108,24 +119,31 @@ export const EmployerManager: React.FC<EmployerManagerProps> = ({
           {employers.map((emp) => (
             <div
               key={emp.id}
-              className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 flex flex-col justify-between"
+              onClick={() => handleOpenEdit(emp)}
+              className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200/80 flex flex-col justify-between hover:border-indigo-200 transition-all cursor-pointer"
             >
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
                     <span
-                      className="w-3.5 h-3.5 rounded-full"
-                      style={{ backgroundColor: emp.color || '#2563eb' }}
+                      className="w-4 h-4 rounded-full shrink-0"
+                      style={{ backgroundColor: emp.color || '#4f46e5' }}
                     />
-                    <h3 className="font-bold text-slate-800 text-sm truncate">{emp.name}</h3>
+                    <h3 className="font-extrabold text-slate-900 text-sm sm:text-base truncate">
+                      {emp.name}
+                    </h3>
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div
+                    className="flex items-center gap-1 shrink-0"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <button
                       onClick={() => handleOpenEdit(emp)}
-                      className="p-1 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50"
+                      className="px-2.5 py-1 text-xs font-bold text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200 rounded-xl flex items-center gap-1"
                       title="編集"
                     >
                       <Edit2 className="w-3.5 h-3.5" />
+                      <span>編集</span>
                     </button>
                     <button
                       onClick={() => {
@@ -133,27 +151,28 @@ export const EmployerManager: React.FC<EmployerManagerProps> = ({
                           onDeleteEmployer(emp.id);
                         }
                       }}
-                      className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50"
+                      className="p-1.5 text-slate-400 hover:text-rose-600 rounded-xl hover:bg-rose-50"
                       title="削除"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
 
-                <div className="space-y-1 text-xs text-slate-500 pt-2 border-t border-slate-100">
-                  {emp.hourly_wage && (
-                    <div className="flex items-center gap-1.5">
-                      <Clock className="w-3 h-3 text-slate-400" />
-                      <span>時給: ¥{emp.hourly_wage.toLocaleString()}</span>
-                    </div>
-                  )}
-                  {emp.payday_memo && (
-                    <div className="flex items-center gap-1.5">
-                      <Calendar className="w-3 h-3 text-slate-400" />
-                      <span>給与日: {emp.payday_memo}</span>
-                    </div>
-                  )}
+                <div className="space-y-1.5 text-xs text-slate-600 pt-3 border-t border-slate-100 tabular-nums">
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-slate-400" />
+                    <span>
+                      基本時給:{' '}
+                      <strong>
+                        {emp.hourly_wage ? `¥${emp.hourly_wage.toLocaleString()}` : '未設定'}
+                      </strong>
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                    <span>給与日: {emp.payday_memo || '未設定'}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -163,46 +182,61 @@ export const EmployerManager: React.FC<EmployerManagerProps> = ({
 
       {/* モーダル */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl">
-            <h3 className="text-lg font-bold text-slate-900 mb-1">
-              {editingId ? 'バイト先の編集' : 'バイト先の新規登録'}
-            </h3>
-            <p className="text-xs text-slate-500 mb-4">
-              バイト先の名称や時給、給与日を入力してください。
-            </p>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div className="w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">バイト先名</label>
+                <h3 className="text-base sm:text-lg font-extrabold text-slate-900">
+                  {editingId ? 'バイト先の編集・変更' : 'バイト先の新規登録'}
+                </h3>
+                <p className="text-xs text-slate-400">
+                  名称を変更すると過去の明細のバイト先名表記も自動更新されます
+                </p>
+              </div>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="p-1.5 rounded-full text-slate-400 hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4 pt-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">バイト先名</label>
                 <input
                   type="text"
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="例: ○○塾、カフェ、大学TA など"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-500 focus:bg-white"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">基本時給（任意）</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  基本時給（任意）
+                </label>
                 <div className="relative">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">
                     ¥
                   </span>
                   <input
                     type="number"
+                    inputMode="numeric"
                     value={hourlyWage}
                     onChange={(e) => setHourlyWage(e.target.value)}
                     placeholder="1200"
-                    className="w-full pl-8 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+                    className="w-full pl-8 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold tabular-nums focus:ring-2 focus:ring-indigo-500 focus:bg-white"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">給料日メモ（任意）</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  給料日メモ（任意）
+                </label>
                 <input
                   type="text"
                   value={paydayMemo}
@@ -212,20 +246,39 @@ export const EmployerManager: React.FC<EmployerManagerProps> = ({
                 />
               </div>
 
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  識別カラー
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {COLOR_SWATCHES.map((sw) => (
+                    <button
+                      key={sw}
+                      type="button"
+                      onClick={() => setColor(sw)}
+                      className={`w-7 h-7 rounded-full transition-transform ${
+                        color === sw ? 'scale-110 ring-2 ring-offset-2 ring-slate-900' : ''
+                      }`}
+                      style={{ backgroundColor: sw }}
+                    />
+                  ))}
+                </div>
+              </div>
+
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="flex-1 py-2.5 border border-slate-200 text-slate-600 font-semibold rounded-xl text-xs hover:bg-slate-50"
+                  className="flex-1 py-3 border border-slate-200 text-slate-600 font-bold rounded-xl text-xs hover:bg-slate-50"
                 >
                   キャンセル
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-md transition-all disabled:opacity-50"
+                  className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-xl text-xs shadow-md transition-all disabled:opacity-50"
                 >
-                  {isSubmitting ? '保存中...' : '保存する'}
+                  {isSubmitting ? '保存中...' : editingId ? '変更を保存' : '登録する'}
                 </button>
               </div>
             </form>

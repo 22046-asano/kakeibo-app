@@ -1,16 +1,17 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, List, Calendar as CalendarIcon, Sliders, Building2, CreditCard as CardIcon } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { 
-  Transaction, 
-  TransactionInsert, 
-  CreditCard, 
-  Employer, 
-  ExpectedIncome, 
-  Reimbursement 
+import {
+  Transaction,
+  TransactionInsert,
+  CreditCard,
+  Employer,
+  ExpectedIncome,
+  Reimbursement,
 } from '@/types';
+import { calculateBillingDate } from '@/lib/creditCardUtils';
 import { Header, NavTab } from '@/components/Header';
 import { MonthSelector } from '@/components/MonthSelector';
 import { SummaryCards } from '@/components/SummaryCards';
@@ -35,6 +36,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [dashboardViewMode, setDashboardViewMode] = useState<'list' | 'calendar'>('list');
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   // データステート
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
@@ -46,13 +48,16 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [initialModalDate, setInitialModalDate] = useState<string | null>(null);
 
   // 月の日付範囲（月初〜月末）
   const getMonthDateRange = (date: Date) => {
     const year = date.getFullYear();
     const month = date.getMonth();
-    const startDate = new Date(year, month, 1).toISOString().split('T')[0];
-    const endDate = new Date(year, month + 1, 0).toISOString().split('T')[0];
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    const mStr = String(month + 1).padStart(2, '0');
+    const startDate = `${year}-${mStr}-01`;
+    const endDate = `${year}-${mStr}-${String(lastDay).padStart(2, '0')}`;
     return { startDate, endDate };
   };
 
@@ -65,7 +70,6 @@ export default function Home() {
         .order('created_at', { ascending: true });
 
       if (error) {
-        console.warn('Cards fetch fallback:', error.message);
         const local = localStorage.getItem('kakeibo_cards');
         if (local) {
           setCards(JSON.parse(local));
@@ -110,7 +114,6 @@ export default function Home() {
         .order('created_at', { ascending: true });
 
       if (error) {
-        console.warn('Employers fetch fallback:', error.message);
         const local = localStorage.getItem('kakeibo_employers');
         if (local) {
           setEmployers(JSON.parse(local));
@@ -139,7 +142,6 @@ export default function Home() {
         .order('expected_pay_date', { ascending: true });
 
       if (error) {
-        console.warn('Expected incomes fallback:', error.message);
         const local = localStorage.getItem('kakeibo_expected_incomes');
         if (local) setExpectedIncomes(JSON.parse(local));
       } else if (data) {
@@ -159,7 +161,6 @@ export default function Home() {
         .order('date', { ascending: false });
 
       if (error) {
-        console.warn('Reimbursements fallback:', error.message);
         const local = localStorage.getItem('kakeibo_reimbursements');
         if (local) setReimbursements(JSON.parse(local));
       } else if (data) {
@@ -181,7 +182,6 @@ export default function Home() {
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.warn('Transactions fallback:', error.message);
         const localData = localStorage.getItem('kakeibo_fallback_data');
         if (localData) {
           setAllTransactions(JSON.parse(localData));
@@ -196,7 +196,6 @@ export default function Home() {
     }
   }, []);
 
-  // 全体データロード
   const refreshAllData = useCallback(() => {
     fetchCards();
     fetchEmployers();
@@ -212,7 +211,7 @@ export default function Home() {
   // Realtime 監視
   useEffect(() => {
     const channel = supabase
-      .channel('kakeibo-realtime-v4')
+      .channel('kakeibo-realtime-v5')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => fetchTransactions())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'credit_cards' }, () => fetchCards())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'employers' }, () => fetchEmployers())
@@ -225,7 +224,7 @@ export default function Home() {
     };
   }, [fetchTransactions, fetchCards, fetchEmployers, fetchExpectedIncomes, fetchReimbursements]);
 
-  // 表示中の月の取引（カードは引き落とし月、現金等は利用月）
+  // 表示中の月の取引（カード決済は引き落とし月、現金等は利用月）
   const { startDate, endDate } = getMonthDateRange(currentDate);
   const monthlyTransactions = allTransactions.filter((t) => {
     const effectiveDate = getEffectiveDate(t);
@@ -238,53 +237,60 @@ export default function Home() {
       next.setMonth(prev.getMonth() + offset);
       return next;
     });
+    setSelectedCategory(null);
   };
 
   const handleResetToday = () => {
     setCurrentDate(new Date());
+    setSelectedCategory(null);
   };
 
-  // 収支登録・更新
+  // --- 収支登録・更新・削除 ---
   const handleSubmitTransaction = async (data: TransactionInsert, id?: string) => {
     if (id) {
       const { error } = await supabase.from('transactions').update(data).eq('id', id);
       if (error) {
         const local = localStorage.getItem('kakeibo_fallback_data');
-        const list: Transaction[] = local ? JSON.parse(local) : [];
+        const list: Transaction[] = local ? JSON.parse(local) : allTransactions;
         const updated = list.map((t) => (t.id === id ? { ...t, ...data } : t));
         localStorage.setItem('kakeibo_fallback_data', JSON.stringify(updated));
+        setAllTransactions(updated);
+      } else {
+        await fetchTransactions();
       }
     } else {
       const { error } = await supabase.from('transactions').insert([data]);
       if (error) {
         const local = localStorage.getItem('kakeibo_fallback_data');
-        const list: Transaction[] = local ? JSON.parse(local) : [];
+        const list: Transaction[] = local ? JSON.parse(local) : allTransactions;
         const newRecord: Transaction = {
           ...data,
           id: `local-${Date.now()}`,
           created_at: new Date().toISOString(),
         };
-        localStorage.setItem('kakeibo_fallback_data', JSON.stringify([newRecord, ...list]));
+        const updated = [newRecord, ...list];
+        localStorage.setItem('kakeibo_fallback_data', JSON.stringify(updated));
+        setAllTransactions(updated);
+      } else {
+        await fetchTransactions();
       }
     }
-    await fetchTransactions();
   };
 
-  // 収支削除
   const handleDeleteTransaction = async (id: string) => {
     const { error } = await supabase.from('transactions').delete().eq('id', id);
     if (error) {
       const local = localStorage.getItem('kakeibo_fallback_data');
-      if (local) {
-        const list: Transaction[] = JSON.parse(local);
-        const filtered = list.filter((t) => t.id !== id);
-        localStorage.setItem('kakeibo_fallback_data', JSON.stringify(filtered));
-      }
+      const list: Transaction[] = local ? JSON.parse(local) : allTransactions;
+      const filtered = list.filter((t) => t.id !== id);
+      localStorage.setItem('kakeibo_fallback_data', JSON.stringify(filtered));
+      setAllTransactions(filtered);
+    } else {
+      await fetchTransactions();
     }
-    await fetchTransactions();
   };
 
-  // クレジットカード CRUD
+  // --- クレジットカード CRUD & 既存明細の引落日再計算 ---
   const handleAddCard = async (newCard: Omit<CreditCard, 'id'>) => {
     const { error } = await supabase.from('credit_cards').insert([newCard]);
     if (error) {
@@ -298,16 +304,47 @@ export default function Home() {
     }
   };
 
-  const handleUpdateCard = async (id: string, cardData: Omit<CreditCard, 'id'>) => {
+  const handleUpdateCard = async (
+    id: string,
+    cardData: Omit<CreditCard, 'id'>,
+    recalculateExisting: boolean = true
+  ) => {
     const { error } = await supabase.from('credit_cards').update(cardData).eq('id', id);
+    const updatedCardObj: CreditCard = { ...cardData, id };
+
     if (error) {
       const local = localStorage.getItem('kakeibo_cards');
       const list: CreditCard[] = local ? JSON.parse(local) : cards;
-      const updated = list.map((c) => (c.id === id ? { ...c, ...cardData } : c));
+      const updated = list.map((c) => (c.id === id ? updatedCardObj : c));
       localStorage.setItem('kakeibo_cards', JSON.stringify(updated));
       setCards(updated);
     } else {
       await fetchCards();
+    }
+
+    // 既存トランザクションの引き落とし日を一括再計算
+    if (recalculateExisting) {
+      const targetTxs = allTransactions.filter((t) => t.credit_card_id === id);
+      for (const tx of targetTxs) {
+        const newBillingDate = calculateBillingDate(tx.date, updatedCardObj);
+        if (newBillingDate !== tx.billing_date) {
+          await supabase
+            .from('transactions')
+            .update({ billing_date: newBillingDate })
+            .eq('id', tx.id);
+        }
+      }
+      const local = localStorage.getItem('kakeibo_fallback_data');
+      if (local) {
+        const list: Transaction[] = JSON.parse(local);
+        const updatedList = list.map((t) =>
+          t.credit_card_id === id
+            ? { ...t, billing_date: calculateBillingDate(t.date, updatedCardObj) }
+            : t
+        );
+        localStorage.setItem('kakeibo_fallback_data', JSON.stringify(updatedList));
+      }
+      await fetchTransactions();
     }
   };
 
@@ -326,7 +363,7 @@ export default function Home() {
     }
   };
 
-  // バイト先 CRUD
+  // --- バイト先 CRUD & 名称同期 ---
   const handleAddEmployer = async (emp: Omit<Employer, 'id'>) => {
     const { error } = await supabase.from('employers').insert([emp]);
     if (error) {
@@ -351,6 +388,19 @@ export default function Home() {
     } else {
       await fetchEmployers();
     }
+
+    // 関連する取引と振込予定のバイト先名も自動更新
+    await supabase
+      .from('transactions')
+      .update({ employer_name: emp.name })
+      .eq('employer_id', id);
+    await supabase
+      .from('expected_incomes')
+      .update({ employer_name: emp.name })
+      .eq('employer_id', id);
+
+    await fetchTransactions();
+    await fetchExpectedIncomes();
   };
 
   const handleDeleteEmployer = async (id: string) => {
@@ -368,7 +418,7 @@ export default function Home() {
     }
   };
 
-  // 振込予定 CRUD & 家計簿反映
+  // --- 振込予定 CRUD (新規・編集・確認・削除) ---
   const handleAddExpectedIncome = async (item: Omit<ExpectedIncome, 'id'>) => {
     const { error } = await supabase.from('expected_incomes').insert([item]);
     if (error) {
@@ -382,8 +432,24 @@ export default function Home() {
     }
   };
 
+  const handleUpdateExpectedIncome = async (id: string, item: Omit<ExpectedIncome, 'id'>) => {
+    const { error } = await supabase.from('expected_incomes').update(item).eq('id', id);
+    if (error) {
+      const local = localStorage.getItem('kakeibo_expected_incomes');
+      const list: ExpectedIncome[] = local ? JSON.parse(local) : expectedIncomes;
+      const updated = list.map((i) => (i.id === id ? { ...i, ...item } : i));
+      localStorage.setItem('kakeibo_expected_incomes', JSON.stringify(updated));
+      setExpectedIncomes(updated);
+    } else {
+      await fetchExpectedIncomes();
+    }
+  };
+
   const handleToggleConfirmIncome = async (id: string, isConfirmed: boolean) => {
-    const { error } = await supabase.from('expected_incomes').update({ is_confirmed: isConfirmed }).eq('id', id);
+    const { error } = await supabase
+      .from('expected_incomes')
+      .update({ is_confirmed: isConfirmed })
+      .eq('id', id);
     if (error) {
       const local = localStorage.getItem('kakeibo_expected_incomes');
       const list: ExpectedIncome[] = local ? JSON.parse(local) : expectedIncomes;
@@ -410,7 +476,6 @@ export default function Home() {
     }
   };
 
-  // 振込予定から家計簿収入へのワンタップ登録
   const handleRegisterIncomeToTransaction = async (income: ExpectedIncome) => {
     await handleSubmitTransaction({
       date: income.expected_pay_date,
@@ -424,22 +489,38 @@ export default function Home() {
     });
   };
 
-  // 立替金 CRUD
+  // --- 立替金 CRUD (新規・編集・精算切替・削除) ---
   const handleAddReimbursement = async (item: Omit<Reimbursement, 'id'>) => {
     const { error } = await supabase.from('reimbursements').insert([item]);
     if (error) {
       const local = localStorage.getItem('kakeibo_reimbursements');
       const list: Reimbursement[] = local ? JSON.parse(local) : reimbursements;
       const created: Reimbursement = { ...item, id: `reimb-${Date.now()}` };
-      localStorage.setItem('kakeibo_reimbursements', JSON.stringify([...list, created]));
-      setReimbursements([...list, created]);
+      localStorage.setItem('kakeibo_reimbursements', JSON.stringify([created, ...list]));
+      setReimbursements([created, ...list]);
+    } else {
+      await fetchReimbursements();
+    }
+  };
+
+  const handleUpdateReimbursement = async (id: string, item: Omit<Reimbursement, 'id'>) => {
+    const { error } = await supabase.from('reimbursements').update(item).eq('id', id);
+    if (error) {
+      const local = localStorage.getItem('kakeibo_reimbursements');
+      const list: Reimbursement[] = local ? JSON.parse(local) : reimbursements;
+      const updated = list.map((r) => (r.id === id ? { ...r, ...item } : r));
+      localStorage.setItem('kakeibo_reimbursements', JSON.stringify(updated));
+      setReimbursements(updated);
     } else {
       await fetchReimbursements();
     }
   };
 
   const handleToggleSettleReimbursement = async (id: string, isSettled: boolean) => {
-    const { error } = await supabase.from('reimbursements').update({ is_settled: isSettled }).eq('id', id);
+    const { error } = await supabase
+      .from('reimbursements')
+      .update({ is_settled: isSettled })
+      .eq('id', id);
     if (error) {
       const local = localStorage.getItem('kakeibo_reimbursements');
       const list: Reimbursement[] = local ? JSON.parse(local) : reimbursements;
@@ -466,89 +547,67 @@ export default function Home() {
     }
   };
 
-  const handleOpenCreateModal = () => {
+  // モーダルオープン制御
+  const handleOpenCreateModal = (dateStr?: string) => {
     setEditingTransaction(null);
+    setInitialModalDate(dateStr || null);
     setIsModalOpen(true);
   };
 
   const handleOpenEditModal = (t: Transaction) => {
     setEditingTransaction(t);
+    setInitialModalDate(null);
     setIsModalOpen(true);
   };
 
+  // 未処理件数バッジ用
+  const pendingTrackerCount =
+    reimbursements.filter((r) => !r.is_settled).length +
+    expectedIncomes.filter((i) => !i.is_confirmed).length;
+
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen pb-24 md:pb-12">
       <Header
         activeTab={activeTab}
         onSelectTab={setActiveTab}
         isSynced={true}
         onRefresh={refreshAllData}
+        onOpenCreateModal={() => handleOpenCreateModal()}
+        unconfirmedCount={pendingTrackerCount}
       />
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-5">
-        {/* 1. 月別収支 ＆ カレンダー統合ダッシュボード */}
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-4 sm:pt-6">
+        {/* 1. 家計簿ダッシュボード（月別収支・ドーナツグラフ・タイムライン・カレンダー統合） */}
         {activeTab === 'dashboard' && (
           <div>
             <MonthSelector
               currentDate={currentDate}
               onChangeMonth={handleChangeMonth}
               onResetToday={handleResetToday}
+              viewMode={dashboardViewMode}
+              onChangeViewMode={setDashboardViewMode}
             />
-
-            <div className="bg-blue-50/80 border border-blue-200/80 rounded-2xl px-4 py-2.5 mb-5 flex items-center justify-between text-xs text-blue-800">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-blue-600" />
-                <span className="font-medium">
-                  支出集計基準: <strong>カード引き落とし月基準</strong>
-                </span>
-              </div>
-              <span className="text-[11px] text-blue-600 hidden sm:inline">
-                ※カード決済分は実際の引落月、現金等は利用月で集計されます
-              </span>
-            </div>
 
             <SummaryCards transactions={monthlyTransactions} />
 
-            {/* 表示モード切り替えスイッチ (明細リスト ⇔ カレンダー表示) */}
-            <div className="flex items-center justify-between mb-4 bg-white p-2 rounded-2xl border border-slate-200/80 shadow-sm">
-              <span className="text-xs font-bold text-slate-700 ml-2">表示形式</span>
-              <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
-                <button
-                  onClick={() => setDashboardViewMode('list')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    dashboardViewMode === 'list'
-                      ? 'bg-white text-blue-700 shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <List className="w-3.5 h-3.5" />
-                  <span>明細リスト</span>
-                </button>
-                <button
-                  onClick={() => setDashboardViewMode('calendar')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    dashboardViewMode === 'calendar'
-                      ? 'bg-white text-blue-700 shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <CalendarIcon className="w-3.5 h-3.5" />
-                  <span>カレンダー</span>
-                </button>
-              </div>
-            </div>
-
             {dashboardViewMode === 'list' ? (
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                <div className="lg:col-span-5 order-2 lg:order-1">
-                  <CategoryBreakdown transactions={monthlyTransactions} />
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+                <div className="lg:col-span-5">
+                  <CategoryBreakdown
+                    transactions={monthlyTransactions}
+                    selectedCategory={selectedCategory}
+                    onSelectCategory={setSelectedCategory}
+                  />
                 </div>
-                <div className="lg:col-span-7 order-1 lg:order-2">
+                <div className="lg:col-span-7">
                   <TransactionList
                     transactions={monthlyTransactions}
                     cards={cards}
+                    selectedCategory={selectedCategory}
+                    onClearCategory={() => setSelectedCategory(null)}
                     onEdit={handleOpenEditModal}
                     onDelete={handleDeleteTransaction}
+                    onOpenCreate={() => handleOpenCreateModal()}
                   />
                 </div>
               </div>
@@ -560,6 +619,8 @@ export default function Home() {
                 onChangeMonth={handleChangeMonth}
                 onResetToday={handleResetToday}
                 onSelectTransaction={handleOpenEditModal}
+                onDeleteTransaction={handleDeleteTransaction}
+                onAddTransactionForDate={(d) => handleOpenCreateModal(d)}
               />
             )}
           </div>
@@ -572,10 +633,12 @@ export default function Home() {
             reimbursements={reimbursements}
             employers={employers}
             onAddExpectedIncome={handleAddExpectedIncome}
+            onUpdateExpectedIncome={handleUpdateExpectedIncome}
             onToggleConfirmIncome={handleToggleConfirmIncome}
             onDeleteExpectedIncome={handleDeleteExpectedIncome}
             onRegisterIncomeToTransaction={handleRegisterIncomeToTransaction}
             onAddReimbursement={handleAddReimbursement}
+            onUpdateReimbursement={handleUpdateReimbursement}
             onToggleSettleReimbursement={handleToggleSettleReimbursement}
             onDeleteReimbursement={handleDeleteReimbursement}
           />
@@ -583,13 +646,15 @@ export default function Home() {
 
         {/* 3. 年間・バイト代タブ */}
         {activeTab === 'yearly' && (
-          <YearlyView 
-            transactions={allTransactions} 
+          <YearlyView
+            transactions={allTransactions}
             employers={employers}
+            onEditTransaction={handleOpenEditModal}
+            onDeleteTransaction={handleDeleteTransaction}
           />
         )}
 
-        {/* 4. 設定タブ（カード管理・編集 ＆ バイト先マスタ管理） */}
+        {/* 4. カード・バイト先設定タブ */}
         {activeTab === 'settings' && (
           <div className="space-y-8">
             <CreditCardManager
@@ -598,6 +663,7 @@ export default function Home() {
               onAddCard={handleAddCard}
               onUpdateCard={handleUpdateCard}
               onDeleteCard={handleDeleteCard}
+              onEditTransaction={handleOpenEditModal}
             />
 
             <EmployerManager
@@ -610,14 +676,14 @@ export default function Home() {
         )}
       </main>
 
-      {/* フローティング追加ボタン */}
-      <div className="fixed bottom-6 right-6 z-40">
+      {/* PC・タブレット用 フローティング記帳ボタン */}
+      <div className="hidden md:block fixed bottom-8 right-8 z-40">
         <button
-          onClick={handleOpenCreateModal}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-3.5 rounded-full shadow-lg shadow-blue-500/30 hover:shadow-xl transition-all transform hover:-translate-y-0.5 active:translate-y-0"
+          onClick={() => handleOpenCreateModal()}
+          className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-extrabold px-6 py-4 rounded-2xl shadow-xl shadow-indigo-500/30 hover:shadow-2xl transition-all transform hover:-translate-y-0.5 active:translate-y-0"
         >
-          <Plus className="w-5 h-5" />
-          <span>収支を記録</span>
+          <Plus className="w-5 h-5 stroke-[2.5px]" />
+          <span>収支を記帳</span>
         </button>
       </div>
 
@@ -625,7 +691,9 @@ export default function Home() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSubmit={handleSubmitTransaction}
+        onDelete={handleDeleteTransaction}
         editingTransaction={editingTransaction}
+        initialDate={initialModalDate}
         cards={cards}
         employers={employers}
       />
