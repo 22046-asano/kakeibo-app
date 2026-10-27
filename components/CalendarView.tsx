@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useRef } from 'react';
 import {
   CreditCard as CardIcon,
   Plus,
@@ -25,6 +25,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   onAddTransactionForDate,
 }) => {
   const todayStr = new Date().toISOString().split('T')[0];
+  const lastTapRef = useRef<{ dateStr: string; time: number }>({ dateStr: '', time: 0 });
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -105,8 +106,32 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     return acc;
   }, {});
 
+  // シングルクリックで日付選択、ダブルクリック（または素早い2回タップ）でその日の収支入力モーダルを起動
+  const handleCellClick = (dateStr: string) => {
+    const now = Date.now();
+    const isDoubleTap =
+      lastTapRef.current.dateStr === dateStr && now - lastTapRef.current.time < 350;
+    lastTapRef.current = { dateStr, time: now };
+
+    if (isDoubleTap) {
+      onSelectDay(dateStr);
+      if (onAddTransactionForDate) {
+        onAddTransactionForDate(dateStr);
+      }
+    } else {
+      onSelectDay(selectedDayStr === dateStr ? null : dateStr);
+    }
+  };
+
+  const handleCellDoubleClick = (dateStr: string) => {
+    onSelectDay(dateStr);
+    if (onAddTransactionForDate) {
+      onAddTransactionForDate(dateStr);
+    }
+  };
+
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden mb-4">
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden mb-4 select-none">
       {/* 曜日ヘッダー（シンプル家計簿スタイル） */}
       <div className="grid grid-cols-7 border-b border-slate-200 bg-orange-50/40 text-center text-[11px] font-extrabold py-2">
         <span className="text-rose-500">日</span>
@@ -128,7 +153,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           return (
             <div
               key={dateStr + idx}
-              onClick={() => onSelectDay(isSelected ? null : dateStr)}
+              onClick={() => handleCellClick(dateStr)}
+              onDoubleClick={() => handleCellDoubleClick(dateStr)}
+              title="クリックで明細選択 / ダブルクリックでこの日に記帳"
               className={`min-h-[68px] sm:min-h-[82px] p-1 sm:p-1.5 transition-all cursor-pointer flex flex-col justify-between ${
                 !isCurrentMonth ? 'bg-slate-50/60 opacity-40' : 'bg-white hover:bg-orange-50/30'
               } ${
@@ -158,7 +185,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 )}
               </div>
 
-              {/* 収支・カード引落表示（シンプル家計簿風 右下数値） */}
+              {/* 収支・カード引落表示 */}
               <div className="space-y-0.5 mt-0.5 overflow-hidden tabular-nums">
                 {summary?.billings && summary.billings.length > 0 && (
                   <div className="space-y-0.5">
@@ -219,8 +246,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             )}
           </>
         ) : (
-          <span className="text-[11px] text-slate-400 font-medium">
-            日付をタップするとその日の明細絞り込みや日付指定での記帳ができます
+          <span className="text-[11px] text-slate-500 font-medium">
+            💡 日付を<strong>ダブルクリック（スマホは2回連続タップ）</strong>すると、その日の収支入力画面が直接開きます
           </span>
         )}
       </div>

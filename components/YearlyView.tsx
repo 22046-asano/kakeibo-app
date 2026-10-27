@@ -46,16 +46,17 @@ export const YearlyView: React.FC<YearlyViewProps> = ({
   const [selectedMonthFilter, setSelectedMonthFilter] = useState<number | null>(null);
 
   const TAX_PRESETS = [
-    { label: '178万円（2026年 所得税新非課税枠）', value: 178 * 10000 },
-    { label: '160万円（2025年 課税最低限引上げライン）', value: 160 * 10000 },
-    { label: '150万円（大学生・特定親族特別控除ライン）', value: 150 * 10000 },
-    { label: '130万円（社会保険・被扶養者の上限）', value: 130 * 10000 },
-    { label: '103万円（従来の所得税ライン・旧基準）', value: 103 * 10000 },
+    { label: '178万円（2026年 所得税新非課税枠）', shortLabel: '178万の壁', value: 178 * 10000 },
+    { label: '160万円（2025年 課税最低限引上げライン）', shortLabel: '160万の壁', value: 160 * 10000 },
+    { label: '150万円（大学生・特定親族特別控除ライン）', shortLabel: '150万の壁', value: 150 * 10000 },
+    { label: '130万円（社会保険・被扶養者の上限）', shortLabel: '130万の壁', value: 130 * 10000 },
+    { label: '123万円（税制改正後 扶養控除・基礎＋給与所得控除ライン）', shortLabel: '123万の壁', value: 123 * 10000 },
+    { label: '103万円（従来の所得税ライン・旧基準）', shortLabel: '103万の壁', value: 103 * 10000 },
   ];
 
-  const [selectedLimit, setSelectedLimit] = useState<number>(178 * 10000);
+  const [selectedLimit, setSelectedLimit] = useState<number>(123 * 10000);
   const [isCustomLimit, setIsCustomLimit] = useState<boolean>(false);
-  const [customLimitInput, setCustomLimitInput] = useState<string>('1780000');
+  const [customLimitInput, setCustomLimitInput] = useState<string>('1230000');
 
   useEffect(() => {
     const saved = localStorage.getItem('kakeibo_tax_limit');
@@ -64,7 +65,7 @@ export const YearlyView: React.FC<YearlyViewProps> = ({
         const parsed = JSON.parse(saved);
         if (parsed.isCustom) {
           setIsCustomLimit(true);
-          setCustomLimitInput(String(parsed.value || 1780000));
+          setCustomLimitInput(String(parsed.value || 1230000));
         } else if (parsed.value) {
           setIsCustomLimit(false);
           setSelectedLimit(parsed.value);
@@ -79,7 +80,7 @@ export const YearlyView: React.FC<YearlyViewProps> = ({
     localStorage.setItem('kakeibo_tax_limit', JSON.stringify({ isCustom, value: val }));
   };
 
-  // 対象年のトランザクション（調整金は年間収入・支出・バイト代計算から完全に除外！）
+  // 対象年のトランザクション（調整金は年間収入・支出・バイト代計算から完全に除外）
   const yearTransactions = transactions.filter(
     (t) => t.date.startsWith(`${selectedYear}-`) && t.category !== '調整金'
   );
@@ -128,7 +129,7 @@ export const YearlyView: React.FC<YearlyViewProps> = ({
 
   // 扶養ライン計算
   const activeLimit = isCustomLimit
-    ? parseInt(customLimitInput, 10) || 178 * 10000
+    ? parseInt(customLimitInput, 10) || 123 * 10000
     : selectedLimit;
   const percent = Math.min((totalPartTimeIncome / activeLimit) * 100, 100);
   const remaining = Math.max(activeLimit - totalPartTimeIncome, 0);
@@ -253,7 +254,7 @@ export const YearlyView: React.FC<YearlyViewProps> = ({
                   </span>
                 ) : (
                   <span>
-                    上限基準まで あと{' '}
+                    選択中の上限基準まで あと{' '}
                     <strong className="text-white text-sm font-extrabold underline">
                       ¥{remaining.toLocaleString()}
                     </strong>
@@ -267,7 +268,7 @@ export const YearlyView: React.FC<YearlyViewProps> = ({
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5 text-xs font-bold text-orange-50">
                   <SlidersHorizontal className="w-3.5 h-3.5" />
-                  <span>扶養・非課税基準ラインの選択</span>
+                  <span>扶養・非課税基準ラインの選択（123万・130万・150万・178万等）</span>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -276,7 +277,7 @@ export const YearlyView: React.FC<YearlyViewProps> = ({
                     onChange={(e) => {
                       if (e.target.value === 'custom') {
                         setIsCustomLimit(true);
-                        handleSaveLimitSetting(true, parseInt(customLimitInput, 10) || 1780000);
+                        handleSaveLimitSetting(true, parseInt(customLimitInput, 10) || 1230000);
                       } else {
                         const val = parseInt(e.target.value, 10);
                         setIsCustomLimit(false);
@@ -324,6 +325,45 @@ export const YearlyView: React.FC<YearlyViewProps> = ({
                     style={{ width: `${percent}%` }}
                   />
                 </div>
+              </div>
+
+              {/* 各年収の壁（103万 / 123万 / 130万 / 150万 / 160万 / 178万）までの残額一覧 */}
+              <div className="pt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                {TAX_PRESETS.slice()
+                  .reverse()
+                  .map((preset) => {
+                    const diff = preset.value - totalPartTimeIncome;
+                    const isSelectedPreset = !isCustomLimit && selectedLimit === preset.value;
+                    return (
+                      <button
+                        key={preset.value}
+                        type="button"
+                        onClick={() => {
+                          setIsCustomLimit(false);
+                          setSelectedLimit(preset.value);
+                          handleSaveLimitSetting(false, preset.value);
+                        }}
+                        className={`p-2 rounded-xl text-left transition-all border ${
+                          isSelectedPreset
+                            ? 'bg-white text-orange-950 border-white shadow-sm'
+                            : 'bg-black/15 text-white border-white/15 hover:bg-black/25'
+                        }`}
+                      >
+                        <p className="text-[10px] font-extrabold opacity-80">{preset.shortLabel}</p>
+                        <p
+                          className={`text-xs font-extrabold tabular-nums mt-0.5 truncate ${
+                            diff < 0
+                              ? isSelectedPreset
+                                ? 'text-rose-600'
+                                : 'text-rose-200'
+                              : ''
+                          }`}
+                        >
+                          {diff >= 0 ? `残 ¥${diff.toLocaleString()}` : `超過 ¥${Math.abs(diff).toLocaleString()}`}
+                        </p>
+                      </button>
+                    );
+                  })}
               </div>
             </div>
           </div>
